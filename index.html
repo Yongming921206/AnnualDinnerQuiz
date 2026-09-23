@@ -633,8 +633,8 @@ input:focus, select:focus {
         <div id="mobile-join-box">
             <h3 style="text-align:center; margin-bottom:15px;">Join Session</h3>
             <p style="text-align:center; color:#666;">PIN: <strong id="phone-display-pin">----</strong></p>
-            <label>Your Name / Table Number</label>
-            <input type="text" id="mobile-player-name" placeholder="e.g. Alex (Table 3)" maxlength="30" style="margin-top:6px;">
+            <label><strong>WWID</strong></label>
+            <input type="text" id="mobile-player-name" placeholder="e.g. 12345678" maxlength="30" style="margin-top:6px;">
             <button class="primary" onclick="playerSubmitJoin()" style="width:100%; margin-top:15px; font-size:18px;">
                 JOIN GAME
             </button>
@@ -1126,7 +1126,7 @@ function initPlayerMode() {
 function playerSubmitJoin() {
     const nameInput = document.getElementById("mobile-player-name").value.trim();
     if (!nameInput) {
-        alert("Please enter your name or table number!");
+        alert("Please enter your WWID!");
         return;
     }
     myPlayerName = nameInput;
