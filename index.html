@@ -763,4 +763,431 @@ function initRealtimeNetwork(onConnected) {
         const statusEl = document.getElementById("host-connection-status");
         if (statusEl) {
             statusEl.textContent = "● Live Network Active";
-            statusEl.style.backg
+            statusEl.style.background = "rgba(40, 167, 69, 0.4)";
+        }
+        if (onConnected) onConnected();
+    });
+
+    mqttClient.on("message", (topic, payload) => {
+        try {
+            const data = JSON.parse(payload.toString());
+            handleNetworkMessage(topic, data);
+        } catch (e) {
+            console.error("Message parse error:", e);
+        }
+    });
+}
+
+function sendNetworkMessage(action, payload) {
+    if (!mqttClient || !gameSessionId) return;
+    const topic = `kahoot_dinner/${gameSessionId}/${action}`;
+    mqttClient.publish(topic, JSON.stringify(payload));
+}
+
+function handleNetworkMessage(topic, data) {
+    const action = topic.split("/").pop();
+
+    if (isHost) {
+        if (action === "join_request") {
+            if (!players[data.playerId]) {
+                players[data.playerId] = {
+                    id: data.playerId,
+                    name: data.name,
+                    score: 0,
+                    answered: -1
+                };
+                renderPlayers();
+                sendNetworkMessage("join_accepted", { playerId: data.playerId });
+            }
+        } else if (action === "submit_answer") {
+            // Only accept if question is active
+            if (isQuestionActive && players[data.playerId] && players[data.playerId].answered === -1) {
+                players[data.playerId].answered = data.answerIndex;
+                
+                // Kahoot speed-based scoring: 500 base points + up to 500 bonus points for quick answers
+                if (data.answerIndex === questions[currentQuestion].correct) {
+                    const speedRatio = Math.max(0, hostTimeLeft) / questionTimeLimit;
+                    const awardedScore = Math.round(500 + (500 * speedRatio));
+                    players[data.playerId].score += awardedScore;
+                }
+                
+                updateAnswerStats();
+
+                // If all registered players have answered, finish countdown early
+                const allAnswered = Object.values(players).length > 0 && 
+                                    Object.values(players).every(p => p.answered !== -1);
+                if (allAnswered) {
+                    handleTimeUp();
+                }
+            }
+        }
+    } else {
+        // Player responses
+        if (action === "join_accepted" && data.playerId === myPlayerId) {
+            showPlayerSection("mobile-waiting-box");
+        } else if (action === "new_question") {
+            currentQuestion = data.questionIndex;
+            playerTimeLeft = data.timeLimit || 20;
+            startPlayerTimer(playerTimeLeft);
+            showPlayerSection("mobile-playing-box");
+            enablePhoneButtons(true);
+        } else if (action === "time_up") {
+            stopPlayerTimer();
+            enablePhoneButtons(false);
+            const currentActive = document.querySelector("#player-view .player-container > div:not(.hidden)");
+            if (currentActive && currentActive.id === "mobile-playing-box") {
+                showPlayerSection("mobile-timeup-box");
+            }
+        } else if (action === "game_over") {
+            stopPlayerTimer();
+            showPlayerSection("mobile-waiting-box");
+            document.getElementById("mobile-waiting-box").innerHTML = `
+                <div style="font-size:55px;">🏆</div>
+                <h2>Game Complete!</h2>
+                <p>Check the big projector screen for the final winner podium!</p>
+            `;
+        }
+    }
+}
+
+/* =========================================================
+   HOST: STUDIO LOGIC
+   ========================================================= */
+function renderStudioQuestions() {
+    const list = document.getElementById("question-list");
+    list.innerHTML = "";
+    document.getElementById("total-q-count").textContent = questions.length;
+    questions.forEach((q, idx) => {
+        const item = document.createElement("div");
+        item.className = "question-item " + (idx === selectedQuestion ? "active" : "");
+        item.innerHTML = `
+            <span>${idx + 1}. ${escapeHtml(q.question.substring(0, 24))}${q.question.length > 24 ? '...' : ''}</span>
+            <span class="q-time-tag">${q.timeLimit || 20}s</span>
+        `;
+        item.onclick = () => {
+            saveCurrentQuestion();
+            selectedQuestion = idx;
+            loadQuestionToEditor(idx);
+            renderStudioQuestions();
+        };
+        list.appendChild(item);
+    });
+}
+
+function loadQuestionToEditor(idx) {
+    const q = questions[idx];
+    document.getElementById("question-title").textContent = "Edit Question " + (idx + 1);
+    document.getElementById("question-text").value = q.question;
+    for (let i = 0; i < 4; i++) {
+        document.getElementById("answer-" + i).value = q.answers[i];
+    }
+    document.getElementById("correct-answer").value = q.correct;
+    document.getElementById("question-timer").value = q.timeLimit || 20;
+}
+
+function saveCurrentQuestion() {
+    if (!questions[selectedQuestion]) return;
+    questions[selectedQuestion].question = document.getElementById("question-text").value.trim();
+    for (let i = 0; i < 4; i++) {
+        questions[selectedQuestion].answers[i] = document.getElementById("answer-" + i).value.trim();
+    }
+    questions[selectedQuestion].correct = parseInt(document.getElementById("correct-answer").value);
+    questions[selectedQuestion].timeLimit = parseInt(document.getElementById("question-timer").value) || 20;
+    renderStudioQuestions();
+}
+
+function backToStudio() {
+    stopHostTimer();
+    hideAllHostViews();
+    document.getElementById("studio-view").classList.remove("hidden");
+}
+
+/* =========================================================
+   HOST: LOBBY & QR GENERATION
+   ========================================================= */
+function openLobby() {
+    saveCurrentQuestion();
+    gameSessionId = "dinner_" + Math.random().toString(36).substr(2, 6).toUpperCase();
+    currentGamePin = Math.floor(1000 + Math.random() * 9000).toString();
+    players = {};
+    hideAllHostViews();
+    document.getElementById("lobby-view").classList.remove("hidden");
+    document.getElementById("game-pin").textContent = currentGamePin;
+    renderPlayers();
+
+    if (mqttClient) {
+        mqttClient.subscribe(`kahoot_dinner/${gameSessionId}/+`);
+    }
+
+    const baseUrl = window.location.href.split('?')[0];
+    const playerJoinUrl = `${baseUrl}?role=player&game=${gameSessionId}&pin=${currentGamePin}`;
+    document.getElementById("join-url").textContent = playerJoinUrl;
+
+    const qrContainer = document.getElementById("qr-code");
+    qrContainer.innerHTML = "";
+    new QRCode(qrContainer, {
+        text: playerJoinUrl,
+        width: 250,
+        height: 250,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+    });
+}
+
+function renderPlayers() {
+    const grid = document.getElementById("players-grid");
+    grid.innerHTML = "";
+    const playerList = Object.values(players);
+    document.getElementById("player-count").textContent = playerList.length;
+    playerList.forEach(p => {
+        const badge = document.createElement("div");
+        badge.className = "player-badge";
+        badge.innerHTML = `
+            <div class="player-avatar">${p.name.charAt(0).toUpperCase()}</div>
+            <span>${escapeHtml(p.name)}</span>
+        `;
+        grid.appendChild(badge);
+    });
+}
+
+function startGame() {
+    hideAllHostViews();
+    document.getElementById("game-view").classList.remove("hidden");
+    currentQuestion = 0;
+    showQuestion();
+}
+
+/* =========================================================
+   HOST: LIVE GAME & COUNTDOWN CONTROLLER
+   ========================================================= */
+function showQuestion() {
+    stopHostTimer();
+    const q = questions[currentQuestion];
+    questionTimeLimit = q.timeLimit || 20;
+    hostTimeLeft = questionTimeLimit;
+    isQuestionActive = true;
+
+    // Reset visual answer highlights
+    for (let i = 0; i < 4; i++) {
+        const box = document.getElementById("box-ans-" + i);
+        box.classList.remove("revealed-correct", "faded");
+    }
+
+    document.getElementById("game-progress").textContent = `Question ${currentQuestion + 1} / ${questions.length}`;
+    document.getElementById("game-question").textContent = q.question;
+    for (let i = 0; i < 4; i++) {
+        document.getElementById("game-answer-" + i).textContent = q.answers[i];
+    }
+
+    // Reset player submissions
+    Object.keys(players).forEach(id => players[id].answered = -1);
+    updateAnswerStats();
+
+    // Start timer on host screen
+    updateTimerDisplay(hostTimeLeft);
+    hostTimerInterval = setInterval(() => {
+        hostTimeLeft--;
+        updateTimerDisplay(hostTimeLeft);
+        if (hostTimeLeft <= 0) {
+            handleTimeUp();
+        }
+    }, 1000);
+
+    // Broadcast new question with timeLimit to all phones
+    sendNetworkMessage("new_question", { 
+        questionIndex: currentQuestion,
+        timeLimit: questionTimeLimit 
+    });
+}
+
+function updateTimerDisplay(seconds) {
+    const timerEl = document.getElementById("game-timer");
+    timerEl.textContent = Math.max(0, seconds) + "s";
+    if (seconds <= 5) {
+        timerEl.classList.add("urgent");
+    } else {
+        timerEl.classList.remove("urgent");
+    }
+}
+
+function handleTimeUp() {
+    stopHostTimer();
+    isQuestionActive = false;
+    updateTimerDisplay(0);
+    sendNetworkMessage("time_up", {});
+
+    // Reveal the correct answer visually on projector screen
+    const correctIdx = questions[currentQuestion].correct;
+    for (let i = 0; i < 4; i++) {
+        const box = document.getElementById("box-ans-" + i);
+        if (i === correctIdx) {
+            box.classList.add("revealed-correct");
+        } else {
+            box.classList.add("faded");
+        }
+    }
+}
+
+function stopHostTimer() {
+    if (hostTimerInterval) {
+        clearInterval(hostTimerInterval);
+        hostTimerInterval = null;
+    }
+}
+
+function updateAnswerStats() {
+    const total = Object.keys(players).length;
+    const count = Object.values(players).filter(p => p.answered !== -1).length;
+    document.getElementById("game-answered-stat").textContent = `${count} of ${total} Answered`;
+}
+
+function nextQuestion() {
+    stopHostTimer();
+    if (currentQuestion < questions.length - 1) {
+        currentQuestion++;
+        showQuestion();
+    } else {
+        finishGame();
+    }
+}
+
+function finishGame() {
+    stopHostTimer();
+    hideAllHostViews();
+    document.getElementById("results-view").classList.remove("hidden");
+    sendNetworkMessage("game_over", {});
+
+    const sorted = Object.values(players).sort((a, b) => b.score - a.score);
+    const list = document.getElementById("results-list");
+    list.innerHTML = "";
+    sorted.forEach((p, idx) => {
+        const row = document.createElement("div");
+        row.className = "result-row";
+        row.innerHTML = `
+            <div class="rank">#${idx + 1}</div>
+            <div style="flex:1; text-align:left; font-weight:800; font-size:18px;">${escapeHtml(p.name)}</div>
+            <div style="font-size:22px; font-weight:900; color:#46178f;">${p.score} pts</div>
+        `;
+        list.appendChild(row);
+    });
+}
+
+function hideAllHostViews() {
+    document.getElementById("studio-view").classList.add("hidden");
+    document.getElementById("lobby-view").classList.add("hidden");
+    document.getElementById("game-view").classList.add("hidden");
+    document.getElementById("results-view").classList.add("hidden");
+}
+
+/* =========================================================
+   MOBILE PLAYER CONTROLLER
+   ========================================================= */
+function initPlayerMode() {
+    isHost = false;
+    document.getElementById("host-app").classList.add("hidden");
+    document.getElementById("player-view").classList.remove("hidden");
+
+    if (myPlayerName) {
+        document.getElementById("mobile-player-name").value = myPlayerName;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    gameSessionId = params.get("game") || "";
+    currentGamePin = params.get("pin") || "----";
+    document.getElementById("phone-display-pin").textContent = currentGamePin;
+
+    initRealtimeNetwork(() => {
+        mqttClient.subscribe(`kahoot_dinner/${gameSessionId}/+`);
+        if (myPlayerName) {
+            sendNetworkMessage("join_request", {
+                playerId: myPlayerId,
+                name: myPlayerName
+            });
+        }
+    });
+}
+
+function playerSubmitJoin() {
+    const nameInput = document.getElementById("mobile-player-name").value.trim();
+    if (!nameInput) {
+        alert("Please enter your name or table number!");
+        return;
+    }
+    myPlayerName = nameInput;
+    localStorage.setItem("trivia_player_name", myPlayerName);
+    sendNetworkMessage("join_request", {
+        playerId: myPlayerId,
+        name: myPlayerName
+    });
+}
+
+function startPlayerTimer(duration) {
+    stopPlayerTimer();
+    playerTimeLeft = duration;
+    const badge = document.getElementById("player-timer-badge");
+    badge.textContent = playerTimeLeft + "s";
+
+    playerTimerInterval = setInterval(() => {
+        playerTimeLeft--;
+        if (playerTimeLeft >= 0) {
+            badge.textContent = playerTimeLeft + "s";
+        }
+        if (playerTimeLeft <= 0) {
+            stopPlayerTimer();
+            enablePhoneButtons(false);
+        }
+    }, 1000);
+}
+
+function stopPlayerTimer() {
+    if (playerTimerInterval) {
+        clearInterval(playerTimerInterval);
+        playerTimerInterval = null;
+    }
+}
+
+function playerPickAnswer(idx) {
+    stopPlayerTimer();
+    enablePhoneButtons(false);
+    sendNetworkMessage("submit_answer", {
+        playerId: myPlayerId,
+        answerIndex: idx
+    });
+    showPlayerSection("mobile-answered-box");
+}
+
+function showPlayerSection(id) {
+    ["mobile-join-box", "mobile-waiting-box", "mobile-playing-box", "mobile-answered-box", "mobile-timeup-box"].forEach(box => {
+        document.getElementById(box).classList.add("hidden");
+    });
+    document.getElementById(id).classList.remove("hidden");
+}
+
+function enablePhoneButtons(enabled) {
+    document.querySelectorAll(".phone-btn").forEach(btn => btn.disabled = !enabled);
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[m]);
+}
+
+/* =========================================================
+   INITIALIZATION
+   ========================================================= */
+window.addEventListener("load", () => {
+    loadDefaultQuestions();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("role") === "player") {
+        initPlayerMode();
+    } else {
+        renderStudioQuestions();
+        loadQuestionToEditor(0);
+        initRealtimeNetwork();
+    }
+});
+</script>
+</body>
+</html>
