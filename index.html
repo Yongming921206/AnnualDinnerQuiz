@@ -186,6 +186,8 @@ input:focus, select:focus {
     border-radius: 12px;
     margin: 15px auto;
     box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    min-height: 250px;
+    min-width: 250px;
 }
 #qr-code {
     width: 250px;
@@ -800,11 +802,10 @@ function handleNetworkMessage(topic, data) {
                 sendNetworkMessage("join_accepted", { playerId: data.playerId });
             }
         } else if (action === "submit_answer") {
-            // Only accept if question is active
             if (isQuestionActive && players[data.playerId] && players[data.playerId].answered === -1) {
                 players[data.playerId].answered = data.answerIndex;
                 
-                // Kahoot speed-based scoring: 500 base points + up to 500 bonus points for quick answers
+                // Speed-based scoring bonus
                 if (data.answerIndex === questions[currentQuestion].correct) {
                     const speedRatio = Math.max(0, hostTimeLeft) / questionTimeLimit;
                     const awardedScore = Math.round(500 + (500 * speedRatio));
@@ -813,7 +814,6 @@ function handleNetworkMessage(topic, data) {
                 
                 updateAnswerStats();
 
-                // If all registered players have answered, finish countdown early
                 const allAnswered = Object.values(players).length > 0 && 
                                     Object.values(players).every(p => p.answered !== -1);
                 if (allAnswered) {
@@ -822,7 +822,6 @@ function handleNetworkMessage(topic, data) {
             }
         }
     } else {
-        // Player responses
         if (action === "join_accepted" && data.playerId === myPlayerId) {
             showPlayerSection("mobile-waiting-box");
         } else if (action === "new_question") {
@@ -900,6 +899,7 @@ function backToStudio() {
     stopHostTimer();
     hideAllHostViews();
     document.getElementById("studio-view").classList.remove("hidden");
+    renderStudioQuestions();
 }
 
 /* =========================================================
@@ -910,6 +910,7 @@ function openLobby() {
     gameSessionId = "dinner_" + Math.random().toString(36).substr(2, 6).toUpperCase();
     currentGamePin = Math.floor(1000 + Math.random() * 9000).toString();
     players = {};
+    
     hideAllHostViews();
     document.getElementById("lobby-view").classList.remove("hidden");
     document.getElementById("game-pin").textContent = currentGamePin;
@@ -919,20 +920,30 @@ function openLobby() {
         mqttClient.subscribe(`kahoot_dinner/${gameSessionId}/+`);
     }
 
-    const baseUrl = window.location.href.split('?')[0];
+    // Build absolute URL for the QR code
+    let baseUrl = window.location.href.split('?')[0];
     const playerJoinUrl = `${baseUrl}?role=player&game=${gameSessionId}&pin=${currentGamePin}`;
     document.getElementById("join-url").textContent = playerJoinUrl;
 
+    // Reset container safely
     const qrContainer = document.getElementById("qr-code");
     qrContainer.innerHTML = "";
-    new QRCode(qrContainer, {
-        text: playerJoinUrl,
-        width: 250,
-        height: 250,
-        colorDark: "#000000",
-        colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.M
-    });
+    
+    // Slight delay to ensure DOM updates before triggering QRCode constructor
+    setTimeout(() => {
+        try {
+            new QRCode(qrContainer, {
+                text: playerJoinUrl,
+                width: 250,
+                height: 250,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        } catch (err) {
+            console.error("QR Code Generation Error: ", err);
+        }
+    }, 100);
 }
 
 function renderPlayers() {
@@ -968,7 +979,6 @@ function showQuestion() {
     hostTimeLeft = questionTimeLimit;
     isQuestionActive = true;
 
-    // Reset visual answer highlights
     for (let i = 0; i < 4; i++) {
         const box = document.getElementById("box-ans-" + i);
         box.classList.remove("revealed-correct", "faded");
@@ -980,11 +990,9 @@ function showQuestion() {
         document.getElementById("game-answer-" + i).textContent = q.answers[i];
     }
 
-    // Reset player submissions
     Object.keys(players).forEach(id => players[id].answered = -1);
     updateAnswerStats();
 
-    // Start timer on host screen
     updateTimerDisplay(hostTimeLeft);
     hostTimerInterval = setInterval(() => {
         hostTimeLeft--;
@@ -994,7 +1002,6 @@ function showQuestion() {
         }
     }, 1000);
 
-    // Broadcast new question with timeLimit to all phones
     sendNetworkMessage("new_question", { 
         questionIndex: currentQuestion,
         timeLimit: questionTimeLimit 
@@ -1017,7 +1024,6 @@ function handleTimeUp() {
     updateTimerDisplay(0);
     sendNetworkMessage("time_up", {});
 
-    // Reveal the correct answer visually on projector screen
     const correctIdx = questions[currentQuestion].correct;
     for (let i = 0; i < 4; i++) {
         const box = document.getElementById("box-ans-" + i);
