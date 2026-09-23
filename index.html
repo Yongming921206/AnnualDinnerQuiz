@@ -4,8 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Annual Dinner Trivia Game</title>
-<!-- QR Code Library & MQTT WebSocket Library -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- MQTT WebSocket Library -->
 <script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
 <style>
 * {
@@ -94,12 +93,18 @@ h1, h2, h3 {
     border-radius: 10px;
     font-weight: 700;
 }
+.secondary:hover {
+    background: #ded7f3;
+}
 .danger {
     background: #e21b3c;
     color: white;
     padding: 12px 20px;
     border-radius: 10px;
     font-weight: 700;
+}
+.danger:hover {
+    background: #b5132d;
 }
 input[type="text"], input[type="number"], select {
     width: 100%;
@@ -118,13 +123,14 @@ input:focus, select:focus {
    ========================================================= */
 .studio-grid {
     display: grid;
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: 340px 1fr;
     gap: 20px;
 }
 .question-list {
-    max-height: 580px;
+    max-height: 520px;
     overflow-y: auto;
     padding-right: 6px;
+    margin-top: 10px;
 }
 .question-item {
     padding: 12px 16px;
@@ -137,10 +143,12 @@ input:focus, select:focus {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    border: 2px solid transparent;
 }
 .question-item.active {
     background: #46178f;
     color: white;
+    border-color: #ffd900;
 }
 .q-time-tag {
     font-size: 11px;
@@ -163,6 +171,11 @@ input:focus, select:focus {
     border-radius: 10px;
     background: #faf9fd;
     border: 1px solid #e7e2f3;
+}
+.btn-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
 }
 
 /* =========================================================
@@ -189,12 +202,12 @@ input:focus, select:focus {
     min-height: 250px;
     min-width: 250px;
 }
-#qr-code {
-    width: 250px;
-    height: 250px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+#qr-image {
+    width: 240px;
+    height: 240px;
+    display: block;
+    margin: auto;
+    border-radius: 8px;
 }
 .game-pin {
     font-size: 52px;
@@ -253,7 +266,7 @@ input:focus, select:focus {
 }
 
 /* =========================================================
-   GAME VIEW (HOST BIG SCREEN)
+   GAME VIEW (HOST SCREEN)
    ========================================================= */
 .game-screen {
     text-align: center;
@@ -447,8 +460,8 @@ input:focus, select:focus {
      ========================================================= -->
 <div id="host-app">
     <div class="topbar">
-        <div class="logo">ANNUAL DINNER <span>GAME</span></div>
-        <div class="status-pill" id="host-connection-status">● Connecting to Game Network...</div>
+        <div class="logo">ANNUAL DINNER <span>QUIZ</span></div>
+        <div class="status-pill" id="host-connection-status">● Connecting...</div>
     </div>
 
     <!-- STUDIO -->
@@ -456,45 +469,52 @@ input:focus, select:focus {
         <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
             <div>
                 <h1>Quiz Studio</h1>
-                <p style="margin:0; color:#666;">Set questions, answer keys, and individual countdown timers per question.</p>
+                <p style="margin:0; color:#666;">Create or edit questions, answer choices, and timers.</p>
             </div>
             <button class="primary" onclick="openLobby()" style="font-size:18px;">Open Lobby for Guests ➔</button>
         </div>
 
         <div class="studio-grid">
             <div class="card">
-                <h3>Questions (<span id="total-q-count">0</span>)</h3>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3>Questions (<span id="total-q-count">0</span>)</h3>
+                    <button class="secondary" onclick="addNewQuestion()" style="padding: 6px 12px; font-size: 13px;">+ New Question</button>
+                </div>
                 <div id="question-list" class="question-list"></div>
             </div>
 
             <div class="card">
-                <h2 id="question-title">Edit Question</h2>
-                <label>Question Text</label>
-                <input type="text" id="question-text" placeholder="Enter question">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2 id="question-title">Edit Question</h2>
+                    <button class="danger" onclick="deleteCurrentQuestion()" style="padding: 6px 12px; font-size: 13px;">Delete Question</button>
+                </div>
+                
+                <label><strong>Question Title</strong></label>
+                <input type="text" id="question-text" placeholder="Enter question..." style="margin-top:6px;">
                 
                 <div class="answer-grid">
                     <div class="answer-input-box">
                         <strong>🔴 Answer A</strong>
-                        <input type="text" id="answer-0">
+                        <input type="text" id="answer-0" style="margin-top:6px;">
                     </div>
                     <div class="answer-input-box">
                         <strong>🔵 Answer B</strong>
-                        <input type="text" id="answer-1">
+                        <input type="text" id="answer-1" style="margin-top:6px;">
                     </div>
                     <div class="answer-input-box">
                         <strong>🟡 Answer C</strong>
-                        <input type="text" id="answer-2">
+                        <input type="text" id="answer-2" style="margin-top:6px;">
                     </div>
                     <div class="answer-input-box">
                         <strong>🟢 Answer D</strong>
-                        <input type="text" id="answer-3">
+                        <input type="text" id="answer-3" style="margin-top:6px;">
                     </div>
                 </div>
 
                 <div style="margin-top:16px; display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
                     <div>
                         <label><strong>Correct Answer:</strong></label>
-                        <select id="correct-answer" style="margin-top:5px;">
+                        <select id="correct-answer" style="margin-top:6px;">
                             <option value="0">🔴 Answer A</option>
                             <option value="1">🔵 Answer B</option>
                             <option value="2">🟡 Answer C</option>
@@ -502,20 +522,22 @@ input:focus, select:focus {
                         </select>
                     </div>
                     <div>
-                        <label><strong>Timer for this Question:</strong></label>
-                        <select id="question-timer" style="margin-top:5px;">
+                        <label><strong>Question Timer:</strong></label>
+                        <select id="question-timer" style="margin-top:6px;">
                             <option value="10">10 Seconds (Speed Round)</option>
                             <option value="15">15 Seconds</option>
                             <option value="20" selected>20 Seconds (Standard)</option>
                             <option value="30">30 Seconds</option>
                             <option value="45">45 Seconds</option>
-                            <option value="60">60 Seconds (Hard/Trivia)</option>
+                            <option value="60">60 Seconds</option>
                         </select>
                     </div>
                 </div>
 
-                <br>
-                <button class="secondary" onclick="saveCurrentQuestion()">Save Question Changes</button>
+                <div class="btn-group">
+                    <button class="primary" onclick="saveCurrentQuestion()">Save Question Changes</button>
+                    <button class="secondary" onclick="addNewQuestion()">+ Add Another Question</button>
+                </div>
             </div>
         </div>
     </section>
@@ -528,7 +550,7 @@ input:focus, select:focus {
                 <div>GAME PIN</div>
                 <div class="game-pin" id="game-pin">----</div>
                 <div class="qr-wrapper">
-                    <div id="qr-code"></div>
+                    <img id="qr-image" src="" alt="Scan QR Code to Join">
                 </div>
                 <strong>Scan with phone camera to join</strong>
                 <div class="join-url-box" id="join-url"></div>
@@ -538,7 +560,7 @@ input:focus, select:focus {
                 <div class="players-header">
                     <div>
                         <h2>Connected Guests</h2>
-                        <div style="color:#666;">Waiting for guests to scan and enter names...</div>
+                        <div style="color:#666;">Waiting for guests to join...</div>
                     </div>
                     <div class="player-count" id="player-count">0</div>
                 </div>
@@ -558,7 +580,7 @@ input:focus, select:focus {
     <section id="game-view" class="main hidden">
         <div class="card game-screen">
             <div class="game-status-bar">
-                <span id="game-progress">Question 1 / 10</span>
+                <span id="game-progress">Question 1</span>
                 <div id="game-timer" class="timer-pill">20s</div>
                 <span id="game-answered-stat">0 Answers Received</span>
             </div>
@@ -666,10 +688,10 @@ let currentGamePin = "";
 let questions = [];
 let selectedQuestion = 0;
 let currentQuestion = 0;
-let players = {}; // id: { name, score, answered }
+let players = {};
 let isHost = true;
 
-// Persist player identification across phone sleep/reload
+// Player Storage
 let myPlayerId = localStorage.getItem("trivia_player_id") || "p_" + Math.random().toString(36).substr(2, 9);
 localStorage.setItem("trivia_player_id", myPlayerId);
 let myPlayerName = localStorage.getItem("trivia_player_name") || "";
@@ -684,7 +706,7 @@ let playerTimerInterval = null;
 let playerTimeLeft = 20;
 
 /* =========================================================
-   DEFAULT QUESTIONS (Malaysian Annual Dinner Theme)
+   DEFAULT QUESTIONS (Malaysian Theme)
    ========================================================= */
 function loadDefaultQuestions() {
     questions = [
@@ -713,36 +735,6 @@ function loadDefaultQuestions() {
             timeLimit: 20
         },
         {
-            question: "How many states are there in Malaysia?",
-            answers: ["12", "13", "14", "15"],
-            correct: 1,
-            timeLimit: 15
-        },
-        {
-            question: "Which Malaysian state is famous for George Town heritage street art?",
-            answers: ["Melaka", "Penang", "Perak", "Sabah"],
-            correct: 1,
-            timeLimit: 20
-        },
-        {
-            question: "What currency is used in Malaysia?",
-            answers: ["Rupiah", "Dollar", "Ringgit", "Baht"],
-            correct: 2,
-            timeLimit: 15
-        },
-        {
-            question: "Which flower is the national flower of Malaysia?",
-            answers: ["Bunga Raya (Hibiscus)", "Orchid", "Rose", "Rafflesia"],
-            correct: 0,
-            timeLimit: 20
-        },
-        {
-            question: "What is the highest mountain in Malaysia?",
-            answers: ["Mount Tahan", "Mount Kinabalu", "Mount Korbu", "Mount Santubong"],
-            correct: 1,
-            timeLimit: 20
-        },
-        {
             question: "Which of these is commonly known as the 'King of Fruits' in Malaysia?",
             answers: ["Mangosteen", "Rambutan", "Durian", "Jackfruit"],
             correct: 2,
@@ -755,29 +747,33 @@ function loadDefaultQuestions() {
    MQTT REAL-TIME SETUP
    ========================================================= */
 function initRealtimeNetwork(onConnected) {
-    mqttClient = mqtt.connect(MQTT_BROKER, {
-        clientId: (isHost ? "host_" : "player_") + Math.random().toString(16).substr(2, 8),
-        clean: true,
-        reconnectPeriod: 3000
-    });
+    try {
+        mqttClient = mqtt.connect(MQTT_BROKER, {
+            clientId: (isHost ? "host_" : "player_") + Math.random().toString(16).substr(2, 8),
+            clean: true,
+            reconnectPeriod: 3000
+        });
 
-    mqttClient.on("connect", () => {
-        const statusEl = document.getElementById("host-connection-status");
-        if (statusEl) {
-            statusEl.textContent = "● Live Network Active";
-            statusEl.style.background = "rgba(40, 167, 69, 0.4)";
-        }
-        if (onConnected) onConnected();
-    });
+        mqttClient.on("connect", () => {
+            const statusEl = document.getElementById("host-connection-status");
+            if (statusEl) {
+                statusEl.textContent = "● Live Network Active";
+                statusEl.style.background = "rgba(40, 167, 69, 0.4)";
+            }
+            if (onConnected) onConnected();
+        });
 
-    mqttClient.on("message", (topic, payload) => {
-        try {
-            const data = JSON.parse(payload.toString());
-            handleNetworkMessage(topic, data);
-        } catch (e) {
-            console.error("Message parse error:", e);
-        }
-    });
+        mqttClient.on("message", (topic, payload) => {
+            try {
+                const data = JSON.parse(payload.toString());
+                handleNetworkMessage(topic, data);
+            } catch (e) {
+                console.error("Message parse error:", e);
+            }
+        });
+    } catch (e) {
+        console.warn("MQTT Network initialisation note:", e);
+    }
 }
 
 function sendNetworkMessage(action, payload) {
@@ -805,7 +801,6 @@ function handleNetworkMessage(topic, data) {
             if (isQuestionActive && players[data.playerId] && players[data.playerId].answered === -1) {
                 players[data.playerId].answered = data.answerIndex;
                 
-                // Speed-based scoring bonus
                 if (data.answerIndex === questions[currentQuestion].correct) {
                     const speedRatio = Math.max(0, hostTimeLeft) / questionTimeLimit;
                     const awardedScore = Math.round(500 + (500 * speedRatio));
@@ -850,17 +845,18 @@ function handleNetworkMessage(topic, data) {
 }
 
 /* =========================================================
-   HOST: STUDIO LOGIC
+   HOST: QUESTION STUDIO & EDITING
    ========================================================= */
 function renderStudioQuestions() {
     const list = document.getElementById("question-list");
     list.innerHTML = "";
     document.getElementById("total-q-count").textContent = questions.length;
+
     questions.forEach((q, idx) => {
         const item = document.createElement("div");
         item.className = "question-item " + (idx === selectedQuestion ? "active" : "");
         item.innerHTML = `
-            <span>${idx + 1}. ${escapeHtml(q.question.substring(0, 24))}${q.question.length > 24 ? '...' : ''}</span>
+            <span>${idx + 1}. ${escapeHtml(q.question.substring(0, 22))}${q.question.length > 22 ? '...' : ''}</span>
             <span class="q-time-tag">${q.timeLimit || 20}s</span>
         `;
         item.onclick = () => {
@@ -874,24 +870,53 @@ function renderStudioQuestions() {
 }
 
 function loadQuestionToEditor(idx) {
+    if (!questions[idx]) return;
     const q = questions[idx];
     document.getElementById("question-title").textContent = "Edit Question " + (idx + 1);
     document.getElementById("question-text").value = q.question;
     for (let i = 0; i < 4; i++) {
-        document.getElementById("answer-" + i).value = q.answers[i];
+        document.getElementById("answer-" + i).value = q.answers[i] || "";
     }
-    document.getElementById("correct-answer").value = q.correct;
+    document.getElementById("correct-answer").value = q.correct !== undefined ? q.correct : 0;
     document.getElementById("question-timer").value = q.timeLimit || 20;
 }
 
 function saveCurrentQuestion() {
     if (!questions[selectedQuestion]) return;
-    questions[selectedQuestion].question = document.getElementById("question-text").value.trim();
+    const qText = document.getElementById("question-text").value.trim();
+    questions[selectedQuestion].question = qText || "Untitled Question";
+    
     for (let i = 0; i < 4; i++) {
-        questions[selectedQuestion].answers[i] = document.getElementById("answer-" + i).value.trim();
+        const ans = document.getElementById("answer-" + i).value.trim();
+        questions[selectedQuestion].answers[i] = ans || ("Option " + (i + 1));
     }
     questions[selectedQuestion].correct = parseInt(document.getElementById("correct-answer").value);
     questions[selectedQuestion].timeLimit = parseInt(document.getElementById("question-timer").value) || 20;
+    renderStudioQuestions();
+}
+
+function addNewQuestion() {
+    saveCurrentQuestion();
+    const newQ = {
+        question: "New Trivia Question",
+        answers: ["Option A", "Option B", "Option C", "Option D"],
+        correct: 0,
+        timeLimit: 20
+    };
+    questions.push(newQ);
+    selectedQuestion = questions.length - 1;
+    loadQuestionToEditor(selectedQuestion);
+    renderStudioQuestions();
+}
+
+function deleteCurrentQuestion() {
+    if (questions.length <= 1) {
+        alert("You must have at least 1 question in the game!");
+        return;
+    }
+    questions.splice(selectedQuestion, 1);
+    selectedQuestion = Math.max(0, selectedQuestion - 1);
+    loadQuestionToEditor(selectedQuestion);
     renderStudioQuestions();
 }
 
@@ -903,7 +928,7 @@ function backToStudio() {
 }
 
 /* =========================================================
-   HOST: LOBBY & QR GENERATION
+   HOST: LOBBY & FOOLPROOF QR GENERATION
    ========================================================= */
 function openLobby() {
     saveCurrentQuestion();
@@ -920,30 +945,14 @@ function openLobby() {
         mqttClient.subscribe(`kahoot_dinner/${gameSessionId}/+`);
     }
 
-    // Build absolute URL for the QR code
-    let baseUrl = window.location.href.split('?')[0];
+    // Generate reliable Player Join URL
+    let baseUrl = window.location.href.split('?')[0].split('#')[0];
     const playerJoinUrl = `${baseUrl}?role=player&game=${gameSessionId}&pin=${currentGamePin}`;
     document.getElementById("join-url").textContent = playerJoinUrl;
 
-    // Reset container safely
-    const qrContainer = document.getElementById("qr-code");
-    qrContainer.innerHTML = "";
-    
-    // Slight delay to ensure DOM updates before triggering QRCode constructor
-    setTimeout(() => {
-        try {
-            new QRCode(qrContainer, {
-                text: playerJoinUrl,
-                width: 250,
-                height: 250,
-                colorDark: "#000000",
-                colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.M
-            });
-        } catch (err) {
-            console.error("QR Code Generation Error: ", err);
-        }
-    }, 100);
+    // Use a completely crash-proof QR API (works instantly without crashing JS thread)
+    const qrImage = document.getElementById("qr-image");
+    qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(playerJoinUrl)}`;
 }
 
 function renderPlayers() {
@@ -970,7 +979,7 @@ function startGame() {
 }
 
 /* =========================================================
-   HOST: LIVE GAME & COUNTDOWN CONTROLLER
+   HOST: LIVE GAME CONTROLLER
    ========================================================= */
 function showQuestion() {
     stopHostTimer();
