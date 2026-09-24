@@ -379,32 +379,32 @@ input:focus, select:focus {
 #player-view {
     min-height: 100vh;
     background: #46178f;
-    padding: 16px;
+    padding: 14px;
     display: flex;
     flex-direction: column;
     justify-content: center;
 }
 .player-container {
-    max-width: 440px;
+    max-width: 480px;
     width: 100%;
     margin: auto;
     background: white;
     border-radius: 20px;
-    padding: 24px;
+    padding: 20px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.25);
 }
 .player-logo {
     text-align: center;
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 900;
     color: #46178f;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 .phone-timer-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
 }
 .phone-timer-badge {
     background: #ffd900;
@@ -414,22 +414,45 @@ input:focus, select:focus {
     font-size: 18px;
     font-weight: 900;
 }
+.phone-question-card {
+    background: #f6f3fb;
+    border: 2px solid #e5dcf4;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    font-size: 17px;
+    font-weight: 800;
+    color: #2b2046;
+    line-height: 1.35;
+    text-align: left;
+}
 .phone-answer-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    height: 380px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 .phone-btn {
     width: 100%;
-    height: 100%;
-    border-radius: 14px;
+    min-height: 64px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-size: 44px;
+    padding: 10px 16px;
+    font-size: 17px;
+    font-weight: 800;
     color: white;
-    box-shadow: 0 6px 14px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    text-align: left;
+    gap: 12px;
+}
+.phone-btn span.p-shape {
+    font-size: 24px;
+    min-width: 28px;
+    text-align: center;
+}
+.phone-btn span.p-text {
+    flex: 1;
+    word-break: break-word;
 }
 .phone-btn:disabled {
     opacity: 0.35;
@@ -634,7 +657,7 @@ input:focus, select:focus {
             <h3 style="text-align:center; margin-bottom:15px;">Join Session</h3>
             <p style="text-align:center; color:#666;">PIN: <strong id="phone-display-pin">----</strong></p>
             <label><strong>WWID</strong></label>
-            <input type="text" id="mobile-player-name" placeholder="e.g. 12345678" maxlength="30" style="margin-top:6px;">
+            <input type="text" id="mobile-player-name" placeholder="Enter WWID (e.g. 12345678)" maxlength="30" style="margin-top:6px;" value="">
             <button class="primary" onclick="playerSubmitJoin()" style="width:100%; margin-top:15px; font-size:18px;">
                 JOIN GAME
             </button>
@@ -644,20 +667,34 @@ input:focus, select:focus {
         <div id="mobile-waiting-box" class="hidden player-status-card">
             <div style="font-size:55px;">🎉</div>
             <h2>You're In!</h2>
-            <p>Look at the big screen projector. The host will start shortly!</p>
+            <p>Welcome, <strong id="player-confirm-name"></strong>!</p>
+            <p style="color:#666;">The host will start the quiz shortly. Keep your phone on this screen.</p>
         </div>
 
         <!-- MOBILE PLAYING -->
         <div id="mobile-playing-box" class="hidden">
             <div class="phone-timer-bar">
-                <span style="font-weight:700; color:#555;">Pick your answer!</span>
+                <span id="player-question-indicator" style="font-weight:800; color:#46178f;">Question</span>
                 <div class="phone-timer-badge" id="player-timer-badge">20s</div>
             </div>
+            <div class="phone-question-card" id="phone-question-text">Loading question...</div>
             <div class="phone-answer-grid">
-                <button class="phone-btn bg-red" onclick="playerPickAnswer(0)">▲</button>
-                <button class="phone-btn bg-blue" onclick="playerPickAnswer(1)">◆</button>
-                <button class="phone-btn bg-yellow" onclick="playerPickAnswer(2)">●</button>
-                <button class="phone-btn bg-green" onclick="playerPickAnswer(3)">■</button>
+                <button class="phone-btn bg-red" onclick="playerPickAnswer(0)">
+                    <span class="p-shape">▲</span>
+                    <span class="p-text" id="p-opt-0"></span>
+                </button>
+                <button class="phone-btn bg-blue" onclick="playerPickAnswer(1)">
+                    <span class="p-shape">◆</span>
+                    <span class="p-text" id="p-opt-1"></span>
+                </button>
+                <button class="phone-btn bg-yellow" onclick="playerPickAnswer(2)">
+                    <span class="p-shape">●</span>
+                    <span class="p-text" id="p-opt-2"></span>
+                </button>
+                <button class="phone-btn bg-green" onclick="playerPickAnswer(3)">
+                    <span class="p-shape">■</span>
+                    <span class="p-text" id="p-opt-3"></span>
+                </button>
             </div>
         </div>
 
@@ -665,7 +702,7 @@ input:focus, select:focus {
         <div id="mobile-answered-box" class="hidden player-status-card">
             <div style="font-size:55px;">⏳</div>
             <h2>Answer Recorded!</h2>
-            <p>Waiting for the timer to end or the host to reveal results...</p>
+            <p>Waiting for the timer to end or for the host to proceed...</p>
         </div>
 
         <!-- MOBILE TIME UP -->
@@ -691,10 +728,9 @@ let currentQuestion = 0;
 let players = {};
 let isHost = true;
 
-// Player Storage
-let myPlayerId = localStorage.getItem("trivia_player_id") || "p_" + Math.random().toString(36).substr(2, 9);
-localStorage.setItem("trivia_player_id", myPlayerId);
-let myPlayerName = localStorage.getItem("trivia_player_name") || "";
+// Player session (Fresh ID generated per session, no auto-fill)
+let myPlayerId = "p_" + Math.random().toString(36).substr(2, 9);
+let myPlayerName = "";
 
 // Timer Management
 let hostTimerInterval = null;
@@ -772,7 +808,7 @@ function initRealtimeNetwork(onConnected) {
             }
         });
     } catch (e) {
-        console.warn("MQTT Network initialisation note:", e);
+        console.warn("MQTT Network initialization error:", e);
     }
 }
 
@@ -795,7 +831,10 @@ function handleNetworkMessage(topic, data) {
                     answered: -1
                 };
                 renderPlayers();
-                sendNetworkMessage("join_accepted", { playerId: data.playerId });
+                sendNetworkMessage("join_accepted", { 
+                    playerId: data.playerId,
+                    playerName: data.name
+                });
             }
         } else if (action === "submit_answer") {
             if (isQuestionActive && players[data.playerId] && players[data.playerId].answered === -1) {
@@ -817,11 +856,24 @@ function handleNetworkMessage(topic, data) {
             }
         }
     } else {
+        // Player side message handling
         if (action === "join_accepted" && data.playerId === myPlayerId) {
+            document.getElementById("player-confirm-name").textContent = data.playerName;
             showPlayerSection("mobile-waiting-box");
         } else if (action === "new_question") {
             currentQuestion = data.questionIndex;
             playerTimeLeft = data.timeLimit || 20;
+
+            // Render question text & choices directly on mobile
+            document.getElementById("player-question-indicator").textContent = `Question ${data.questionIndex + 1}`;
+            document.getElementById("phone-question-text").textContent = data.questionText;
+            for (let i = 0; i < 4; i++) {
+                const optEl = document.getElementById("p-opt-" + i);
+                if (optEl) {
+                    optEl.textContent = data.answers[i] || "";
+                }
+            }
+
             startPlayerTimer(playerTimeLeft);
             showPlayerSection("mobile-playing-box");
             enablePhoneButtons(true);
@@ -928,7 +980,7 @@ function backToStudio() {
 }
 
 /* =========================================================
-   HOST: LOBBY & FOOLPROOF QR GENERATION
+   HOST: LOBBY & QR GENERATION
    ========================================================= */
 function openLobby() {
     saveCurrentQuestion();
@@ -945,12 +997,10 @@ function openLobby() {
         mqttClient.subscribe(`kahoot_dinner/${gameSessionId}/+`);
     }
 
-    // Generate reliable Player Join URL
     let baseUrl = window.location.href.split('?')[0].split('#')[0];
     const playerJoinUrl = `${baseUrl}?role=player&game=${gameSessionId}&pin=${currentGamePin}`;
     document.getElementById("join-url").textContent = playerJoinUrl;
 
-    // Use a completely crash-proof QR API (works instantly without crashing JS thread)
     const qrImage = document.getElementById("qr-image");
     qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(playerJoinUrl)}`;
 }
@@ -1011,8 +1061,11 @@ function showQuestion() {
         }
     }, 1000);
 
+    // Broadcast question text, options and timer to all phones
     sendNetworkMessage("new_question", { 
         questionIndex: currentQuestion,
+        questionText: q.question,
+        answers: q.answers,
         timeLimit: questionTimeLimit 
     });
 }
@@ -1103,9 +1156,9 @@ function initPlayerMode() {
     document.getElementById("host-app").classList.add("hidden");
     document.getElementById("player-view").classList.remove("hidden");
 
-    if (myPlayerName) {
-        document.getElementById("mobile-player-name").value = myPlayerName;
-    }
+    // Ensure WWID input is blank every time a player joins
+    const nameInput = document.getElementById("mobile-player-name");
+    nameInput.value = "";
 
     const params = new URLSearchParams(window.location.search);
     gameSessionId = params.get("game") || "";
@@ -1114,12 +1167,6 @@ function initPlayerMode() {
 
     initRealtimeNetwork(() => {
         mqttClient.subscribe(`kahoot_dinner/${gameSessionId}/+`);
-        if (myPlayerName) {
-            sendNetworkMessage("join_request", {
-                playerId: myPlayerId,
-                name: myPlayerName
-            });
-        }
     });
 }
 
@@ -1130,7 +1177,6 @@ function playerSubmitJoin() {
         return;
     }
     myPlayerName = nameInput;
-    localStorage.setItem("trivia_player_name", myPlayerName);
     sendNetworkMessage("join_request", {
         playerId: myPlayerId,
         name: myPlayerName
