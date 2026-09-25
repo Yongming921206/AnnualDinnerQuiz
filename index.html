@@ -347,7 +347,7 @@ input:focus, select:focus {
 .bg-green { background: #26890c; }
 
 /* =========================================================
-   RESULTS VIEW & PODIUM ANIMATION
+   RESULTS VIEW & PODIUM & LIVE SCORE
    ========================================================= */
 .podium-container {
     display: flex;
@@ -447,12 +447,66 @@ input:focus, select:focus {
     0% { transform: translate(-50%, 0); }
     100% { transform: translate(-50%, -6px); }
 }
-
 .secondary-leaderboard {
     max-width: 750px;
     margin: 40px auto 20px auto;
     border-top: 2px dashed #ddd8ec;
     padding-top: 30px;
+}
+.results-list {
+    max-width: 750px;
+    margin: 20px auto;
+}
+.result-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 22px;
+    margin-bottom: 10px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+}
+.rank {
+    font-size: 24px;
+    font-weight: 900;
+    width: 50px;
+}
+.live-leaderboard {
+    position: absolute;
+    top: 80px;
+    right: 24px;
+    width: 320px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+    z-index: 100;
+    opacity: 0;
+    transform: translateX(50px);
+    transition: all 0.5s ease-out;
+}
+.live-leaderboard.visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+.live-leaderboard h3 {
+    margin-top:0;
+    text-align: center;
+    color: #46178f;
+}
+.live-score-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 4px;
+    font-size: 15px;
+    font-weight: 700;
+}
+.live-score-row .name {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
 }
 
 /* =========================================================
@@ -744,6 +798,11 @@ input:focus, select:focus {
                 NEXT QUESTION ➔
             </button>
         </div>
+         <!-- LIVE LEADERBOARD (HOST ONLY) -->
+        <div id="live-leaderboard" class="live-leaderboard">
+            <h3>Live Scores</h3>
+            <div id="live-board-rows"></div>
+        </div>
     </section>
 
     <!-- RESULTS (FINAL LEADERS & PODIUM) -->
@@ -752,15 +811,12 @@ input:focus, select:focus {
             <h1>🏆 Leaderboard & Top Winners 🏆</h1>
             
             <div class="podium-container">
-                <!-- 2ND Place -->
                 <div class="podium-col second-place" id="p-col-2">
                     <div class="podium-avatar">2</div>
                     <div class="podium-name" id="p-name-2">---</div>
                     <div class="podium-score" id="p-score-2">0 pts</div>
                     <div class="podium-block">2</div>
                 </div>
-                
-                <!-- 1ST Place -->
                 <div class="podium-col first-place" id="p-col-1">
                     <span class="crown-icon">👑</span>
                     <div class="podium-avatar">1</div>
@@ -768,8 +824,6 @@ input:focus, select:focus {
                     <div class="podium-score" id="p-score-1">0 pts</div>
                     <div class="podium-block">1</div>
                 </div>
-                
-                <!-- 3RD Place -->
                 <div class="podium-col third-place" id="p-col-3">
                     <div class="podium-avatar">3</div>
                     <div class="podium-name" id="p-name-3">---</div>
@@ -796,27 +850,24 @@ input:focus, select:focus {
     <div class="player-container">
         <div class="player-logo">ANNUAL DINNER QUIZ</div>
 
-        <!-- MOBILE JOIN -->
         <div id="mobile-join-box">
             <h3 style="text-align:center; margin-bottom:15px;">Join Session</h3>
             <p style="text-align:center; color:#666;">PIN: <strong id="phone-display-pin">----</strong></p>
             <label><strong>WWID</strong></label>
-            <input type="text" id="mobile-player-name" placeholder="Enter WWID (e.g. 12345678)" maxlength="30" style="margin-top:6px;" value="">
+            <input type="number" id="mobile-player-name" placeholder="e.g. 12345678" maxlength="30" style="margin-top:6px;" value="">
             <button class="primary" id="btn-join-submit" onclick="playerSubmitJoin()" style="width:100%; margin-top:15px; font-size:18px;">
                 JOIN GAME
             </button>
             <div id="player-net-status" class="net-status">Connecting to server...</div>
         </div>
 
-        <!-- MOBILE WAITING -->
         <div id="mobile-waiting-box" class="hidden player-status-card">
             <div style="font-size:55px;">🎉</div>
             <h2>You're In!</h2>
             <p>Welcome, <strong id="player-confirm-name"></strong>!</p>
-            <p style="color:#666;">Look at the big screen projector. The host will start shortly!</p>
+            <p style="color:#666;">The host will start the quiz shortly. Keep your phone on this screen.</p>
         </div>
 
-        <!-- MOBILE PLAYING -->
         <div id="mobile-playing-box" class="hidden">
             <div class="phone-timer-bar">
                 <span id="player-question-indicator" style="font-weight:800; color:#46178f;">Question</span>
@@ -843,14 +894,12 @@ input:focus, select:focus {
             </div>
         </div>
 
-        <!-- MOBILE ANSWER SUBMITTED -->
         <div id="mobile-answered-box" class="hidden player-status-card">
             <div style="font-size:55px;">⏳</div>
             <h2>Answer Recorded!</h2>
             <p>Waiting for the timer to end or for the host to proceed...</p>
         </div>
 
-        <!-- MOBILE TIME UP -->
         <div id="mobile-timeup-box" class="hidden player-status-card">
             <div style="font-size:55px;">⏰</div>
             <h2 style="color:#e21b3c;">Time's Up!</h2>
@@ -861,9 +910,8 @@ input:focus, select:focus {
 
 <script>
 /* =========================================================
-   PUBLIC REAL-TIME MESSAGING (MQTT OVER WEBSOCKET)
+   CORE GAME LOGIC & NETWORKING
    ========================================================= */
-// Secure WebSocket connection string with explicit /mqtt path
 const MQTT_BROKER = "wss://broker.emqx.io:8084/mqtt";
 let mqttClient = null;
 let gameSessionId = "";
@@ -1201,6 +1249,8 @@ function showQuestion() {
     questionTimeLimit = q.timeLimit || 20;
     hostTimeLeft = questionTimeLimit;
     isQuestionActive = true;
+    
+    document.getElementById('live-leaderboard').classList.remove('visible');
 
     for (let i = 0; i < 4; i++) {
         const box = document.getElementById("box-ans-" + i);
@@ -1258,6 +1308,23 @@ function handleTimeUp() {
             box.classList.add("faded");
         }
     }
+    
+    // Show live leaderboard after revealing answer
+    setTimeout(showLiveLeaderboard, 1500);
+}
+
+function showLiveLeaderboard() {
+    const board = document.getElementById('live-leaderboard');
+    const rows = document.getElementById('live-board-rows');
+    rows.innerHTML = '';
+    const top5 = Object.values(players).sort((a,b) => b.score - a.score).slice(0, 5);
+    top5.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'live-score-row';
+        row.innerHTML = `<span class="name">${escapeHtml(p.name)}</span><span class="score">${p.score} pts</span>`;
+        rows.appendChild(row);
+    });
+    board.classList.add('visible');
 }
 
 function stopHostTimer() {
@@ -1278,10 +1345,9 @@ function finishGame() {
 
     const sorted = Object.values(players).sort((a, b) => b.score - a.score);
 
-    // Fixed array indexing bug
     const p1 = sorted[0] || { name: "---", score: 0 };
-    const p2 = sorted || { name: "---", score: 0 };
-    const p3 = sorted || { name: "---", score: 0 };
+    const p2 = sorted[1] || { name: "---", score: 0 };
+    const p3 = sorted[2] || { name: "---", score: 0 };
 
     document.getElementById("p-name-1").textContent = escapeHtml(p1.name);
     document.getElementById("p-score-1").textContent = p1.score + " pts";
@@ -1357,18 +1423,16 @@ function initPlayerMode() {
     const nameInput = document.getElementById("mobile-player-name");
     nameInput.value = "";
 
-    // Parse parameters reliably
     const urlParams = new URLSearchParams(window.location.search);
     gameSessionId = urlParams.get("game") || "";
     currentGamePin = urlParams.get("pin") || "----";
 
-    // Fallback URL parsing if search is blank
     if (!gameSessionId) {
         const fullUrl = window.location.href;
         const matchGame = fullUrl.match(/[?&]game=([^&]+)/);
         const matchPin = fullUrl.match(/[?&]pin=([^&]+)/);
-        if (matchGame) gameSessionId = decodeURIComponent(matchGame);
-        if (matchPin) currentGamePin = decodeURIComponent(matchPin);
+        if (matchGame) gameSessionId = decodeURIComponent(matchGame[1]);
+        if (matchPin) currentGamePin = decodeURIComponent(matchPin[1]);
     }
 
     document.getElementById("phone-display-pin").textContent = currentGamePin;
@@ -1404,7 +1468,6 @@ function playerSubmitJoin() {
         name: myPlayerName
     });
 
-    // Timeout safety fallback if host does not respond
     setTimeout(() => {
         if (!document.getElementById("mobile-join-box").classList.contains("hidden")) {
             btn.disabled = false;
@@ -1466,11 +1529,11 @@ function escapeHtml(str) {
 }
 
 /* =========================================================
-   INITIALIZATION
+   INITIALIZATION & ROLE ROUTING
    ========================================================= */
 window.addEventListener("load", () => {
     loadDefaultQuestions();
-
+    
     const fullUrl = window.location.href;
     const isPlayer = fullUrl.includes("role=player");
 
