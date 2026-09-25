@@ -1047,7 +1047,7 @@ function renderStudioQuestions() {
         const item = document.createElement("div");
         item.className = "question-item " + (idx === selectedQuestion ? "active" : "");
         item.innerHTML = `
-            <span>\${idx + 1}. \${escapeHtml(q.question.substring(0, 22))}${q.question.length > 22 ? '...' : ''}</span>
+            <span>${idx + 1}. ${escapeHtml(q.question.substring(0, 22))}${q.question.length > 22 ? '...' : ''}</span>
             <span class="q-time-tag">${q.timeLimit || 20}s</span>
         `;
         item.onclick = () => {
@@ -1129,4 +1129,308 @@ function openLobby() {
     
     hideAllHostViews();
     document.getElementById("lobby-view").classList.remove("hidden");
-    document
+    document.getElementById("game-pin").textContent = currentGamePin;
+    renderPlayers();
+
+    if (mqttClient) {
+        mqttClient.subscribe(`kahoot_dinner/${gameSessionId}/+`);
+    }
+
+    let baseUrl = window.location.href.split('?')[0].split('#')[0];
+    const playerJoinUrl = `${baseUrl}?role=player&game=${gameSessionId}&pin=${currentGamePin}`;
+    document.getElementById("join-url").textContent = playerJoinUrl;
+
+    const qrImage = document.getElementById("qr-image");
+    qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(playerJoinUrl)}`;
+}
+
+function renderPlayers() {
+    const grid = document.getElementById("players-grid");
+    grid.innerHTML = "";
+    const playerList = Object.values(players);
+    document.getElementById("player-count").textContent = playerList.length;
+    playerList.forEach(p => {
+        const badge = document.createElement("div");
+        badge.className = "player-badge";
+        badge.innerHTML = `
+            <div class="player-avatar">${p.name.charAt(0).toUpperCase()}</div>
+            <span>${escapeHtml(p.name)}</span>
+        `;
+        grid.appendChild(badge);
+    });
+}
+
+function startGame() {
+    hideAllHostViews();
+    document.getElementById("game-view").classList.remove("hidden");
+    currentQuestion = 0;
+    showQuestion();
+}
+
+/* =========================================================
+   HOST: LIVE GAME CONTROLLER
+   ========================================================= */
+function showQuestion() {
+    stopHostTimer();
+    const q = questions[currentQuestion];
+    questionTimeLimit = q.timeLimit || 20;
+    hostTimeLeft = questionTimeLimit;
+    isQuestionActive = true;
+
+    for (let i = 0; i < 4; i++) {
+        const box = document.getElementById("box-ans-" + i);
+        box.classList.remove("revealed-correct", "faded");
+    }
+
+    document.getElementById("game-progress").textContent = `Question ${currentQuestion + 1} / ${questions.length}`;
+    document.getElementById("game-question").textContent = q.question;
+    for (let i = 0; i < 4; i++) {
+        document.getElementById("game-answer-" + i).textContent = q.answers[i];
+    }
+
+    Object.keys(players).forEach(id => players[id].answered = -1);
+    updateAnswerStats();
+
+    updateTimerDisplay(hostTimeLeft);
+    hostTimerInterval = setInterval(() => {
+        hostTimeLeft--;
+        updateTimerDisplay(hostTimeLeft);
+        if (hostTimeLeft <= 0) {
+            handleTimeUp();
+        }
+    }, 1000);
+
+    sendNetworkMessage("new_question", { 
+        questionIndex: currentQuestion,
+        questionText: q.question,
+        answers: q.answers,
+        timeLimit: questionTimeLimit 
+    });
+}
+
+function updateTimerDisplay(seconds) {
+    const timerEl = document.getElementById("game-timer");
+    timerEl.textContent = Math.max(0, seconds) + "s";
+    if (seconds <= 5) {
+        timerEl.classList.add("urgent");
+    } else {
+        timerEl.classList.remove("urgent");
+    }
+}
+
+function handleTimeUp() {
+    stopHostTimer();
+    isQuestionActive = false;
+    updateTimerDisplay(0);
+    sendNetworkMessage("time_up", {});
+
+    const correctIdx = questions[currentQuestion].correct;
+    for (let i = 0; i < 4; i++) {
+        const box = document.getElementById("box-ans-" + i);
+        if (i === correctIdx) {
+            box.classList.add("revealed-correct");
+        } else {
+            box.classList.add("faded");
+        }
+    }
+}
+
+function stopHostTimer() {
+    if (hostTimerInterval) {
+        clearInterval(hostTimerInterval);
+        hostTimerInterval = null;
+    }
+}
+
+/* =========================================================
+   HOST: WINNER PODIUM REVEAL LOGIC
+   ========================================================= */
+function finishGame() {
+    stopHostTimer();
+    hideAllHostViews();
+    document.getElementById("results-view").classList.remove("hidden");
+    sendNetworkMessage("game_over", {});
+
+    const sorted = Object.values(players).sort((a, b) => b.score - a.score);
+
+    const p1 = sorted[0] || { name: "---", score: 0 };
+    const p2 = sorted || { name: "---", score: 0 };
+    const p3 = sorted || { name: "---", score: 0 };
+
+    document.getElementById("p-name-1").textContent = escapeHtml(p1.name);
+    document.getElementById("p-score-1").textContent = p1.score + " pts";
+    
+    document.getElementById("p-name-2").textContent = escapeHtml(p2.name);
+    document.getElementById("p-score-2").textContent = p2.score + " pts";
+
+    document.getElementById("p-name-3").textContent = escapeHtml(p3.name);
+    document.getElementById("p-score-3").textContent = p3.score + " pts";
+
+    const runnersUpList = document.getElementById("results-list");
+    runnersUpList.innerHTML = "";
+    if (sorted.length > 3) {
+        const runnersUp = sorted.slice(3);
+        runnersUp.forEach((p, idx) => {
+            const row = document.createElement("div");
+            row.className = "result-row";
+            row.innerHTML = `
+                <div class="rank">#${idx + 4}</div>
+                <div style="flex:1; text-align:left; font-weight:800; font-size:18px;">${escapeHtml(p.name)}</div>
+                <div style="font-size:22px; font-weight:900; color:#46178f;">${p.score} pts</div>
+            `;
+            runnersUpList.appendChild(row);
+        });
+    } else {
+        runnersUpList.innerHTML = "<p style='color:#666;'>No other competitors recorded.</p>";
+    }
+
+    const col1 = document.getElementById("p-col-1");
+    const col2 = document.getElementById("p-col-2");
+    const col3 = document.getElementById("p-col-3");
+    
+    col1.classList.remove("reveal-active");
+    col2.classList.remove("reveal-active");
+    col3.classList.remove("reveal-active");
+
+    setTimeout(() => { col3.classList.add("reveal-active"); }, 400);
+    setTimeout(() => { col2.classList.add("reveal-active"); }, 1400);
+    setTimeout(() => { col1.classList.add("reveal-active"); }, 2800);
+}
+
+function hideAllHostViews() {
+    document.getElementById("studio-view").classList.add("hidden");
+    document.getElementById("lobby-view").classList.add("hidden");
+    document.getElementById("game-view").classList.add("hidden");
+    document.getElementById("results-view").classList.add("hidden");
+}
+
+function updateAnswerStats() {
+    const total = Object.keys(players).length;
+    const count = Object.values(players).filter(p => p.answered !== -1).length;
+    document.getElementById("game-answered-stat").textContent = `${count} of ${total} Answered`;
+}
+
+/* =========================================================
+   MOBILE PLAYER CONTROLLER
+   ========================================================= */
+function initPlayerMode() {
+    isHost = false;
+    document.getElementById("host-app").classList.add("hidden");
+    document.getElementById("player-view").classList.remove("hidden");
+
+    const nameInput = document.getElementById("mobile-player-name");
+    nameInput.value = "";
+
+    const params = new URLSearchParams(window.location.search);
+    gameSessionId = params.get("game") || "";
+    currentGamePin = params.get("pin") || "----";
+    document.getElementById("phone-display-pin").textContent = currentGamePin;
+
+    initRealtimeNetwork(() => {
+        mqttClient.subscribe(`kahoot_dinner/${gameSessionId}/+`);
+    });
+}
+
+function playerSubmitJoin() {
+    const nameInput = document.getElementById("mobile-player-name").value.trim();
+    if (!nameInput) {
+        alert("Please enter your WWID!");
+        return;
+    }
+    myPlayerName = nameInput;
+    sendNetworkMessage("join_request", {
+        playerId: myPlayerId,
+        name: myPlayerName
+    });
+}
+
+function startPlayerTimer(duration) {
+    stopPlayerTimer();
+    playerTimeLeft = duration;
+    const badge = document.getElementById("player-timer-badge");
+    badge.textContent = playerTimeLeft + "s";
+
+    playerTimerInterval = setInterval(() => {
+        playerTimeLeft--;
+        if (playerTimeLeft >= 0) {
+            badge.textContent = playerTimeLeft + "s";
+        }
+        if (playerTimeLeft <= 0) {
+            stopPlayerTimer();
+            enablePhoneButtons(false);
+        }
+    }, 1000);
+}
+
+function stopPlayerTimer() {
+    if (playerTimerInterval) {
+        clearInterval(playerTimerInterval);
+        playerTimerInterval = null;
+    }
+}
+
+function playerPickAnswer(idx) {
+    stopPlayerTimer();
+    enablePhoneButtons(false);
+    sendNetworkMessage("submit_answer", {
+        playerId: myPlayerId,
+        answerIndex: idx
+    });
+    showPlayerSection("mobile-answered-box");
+}
+
+function showPlayerSection(id) {
+    ["mobile-join-box", "mobile-waiting-box", "mobile-playing-box", "mobile-answered-box", "mobile-timeup-box"].forEach(box => {
+        document.getElementById(box).classList.add("hidden");
+    });
+    document.getElementById(id).classList.remove("hidden");
+}
+
+function enablePhoneButtons(enabled) {
+    document.querySelectorAll(".phone-btn").forEach(btn => btn.disabled = !enabled);
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[m]);
+}
+
+/* =========================================================
+   INITIALIZATION & STRICT ROLE ROUTING
+   ========================================================= */
+window.addEventListener("load", () => {
+    loadDefaultQuestions();
+    
+    // Modern URLSearchParams lookup
+    const params = new URLSearchParams(window.location.search);
+    let role = params.get("role");
+
+    // Robust Fallback Query String Split
+    if (!role) {
+        const queryStr = window.location.href.split('?') || "";
+        const pairs = queryStr.split('&');
+        for (let pair of pairs) {
+            const [key, val] = pair.split('=');
+            if (key === "role") {
+                role = val;
+                break;
+            }
+        }
+    }
+
+    // STAGE 2: Force Player Mode on phone screen sizes & touch-devices
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isSmallScreen = window.innerWidth <= 768;
+
+    if (role === "player" || isMobileDevice || isSmallScreen) {
+        initPlayerMode();
+    } else {
+        renderStudioQuestions();
+        loadQuestionToEditor(0);
+        initRealtimeNetwork();
+    }
+});
+</script>
+</body>
+</html>
