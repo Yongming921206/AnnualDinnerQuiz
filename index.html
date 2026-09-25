@@ -347,30 +347,113 @@ input:focus, select:focus {
 .bg-green { background: #26890c; }
 
 /* =========================================================
-   RESULTS VIEW
+   RESULTS VIEW & PODIUM ANIMATION
    ========================================================= */
-.results-list {
-    max-width: 750px;
-    margin: 20px auto;
-}
-.result-row {
+.podium-container {
     display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 20px;
+    height: 380px;
+    margin: 40px auto;
+    max-width: 800px;
+}
+.podium-col {
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    padding: 16px 22px;
-    margin-bottom: 10px;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+    width: 180px;
+    opacity: 0;
+    transform: translateY(100px);
 }
-.result-row:nth-child(1) {
-    background: #fff8db;
-    border: 2px solid #ffd900;
+.podium-col.reveal-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: transform 1s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.8s ease;
 }
-.rank {
+.podium-avatar {
+    width: 65px;
+    height: 65px;
+    border-radius: 50%;
+    background: #46178f;
+    color: white;
     font-size: 24px;
     font-weight: 900;
-    width: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    margin-bottom: 10px;
+    border: 3px solid white;
+}
+.podium-col.first-place .podium-avatar {
+    width: 85px;
+    height: 85px;
+    font-size: 32px;
+    border-color: #ffd900;
+}
+.podium-name {
+    font-size: 18px;
+    font-weight: 800;
+    margin-bottom: 4px;
+    color: #292343;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    max-width: 170px;
+}
+.podium-score {
+    font-size: 15px;
+    font-weight: 700;
+    color: #70678d;
+    margin-bottom: 12px;
+}
+.podium-block {
+    width: 100%;
+    border-radius: 12px 12px 0 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    font-weight: 900;
+    color: rgba(255,255,255,0.9);
+    position: relative;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+}
+.first-place .podium-block {
+    height: 200px;
+    background: linear-gradient(135deg, #ffca00, #d89e00);
+    border: 3px solid #ffd900;
+    border-bottom: 0;
+}
+.second-place .podium-block {
+    height: 150px;
+    background: linear-gradient(135deg, #bdc3c7, #95a5a6);
+}
+.third-place .podium-block {
+    height: 110px;
+    background: linear-gradient(135deg, #e67e22, #d35400);
+}
+.crown-icon {
+    font-size: 32px;
+    position: absolute;
+    top: -34px;
+    left: 50%;
+    transform: translateX(-50%);
+    animation: floating 1.2s ease-in-out infinite alternate;
+}
+@keyframes floating {
+    0% { transform: translate(-50%, 0); }
+    100% { transform: translate(-50%, -6px); }
+}
+
+/* Secondary Leaderboard (4th place and below) */
+.secondary-leaderboard {
+    max-width: 750px;
+    margin: 40px auto 20px auto;
+    border-top: 2px dashed #ddd8ec;
+    padding-top: 30px;
 }
 
 /* =========================================================
@@ -472,6 +555,30 @@ input:focus, select:focus {
     }
     .game-question {
         font-size: 24px;
+    }
+    .podium-container {
+        gap: 10px;
+        height: 320px;
+    }
+    .podium-col {
+        width: 105px;
+    }
+    .podium-block {
+        font-size: 32px;
+    }
+    .podium-avatar {
+        width: 50px;
+        height: 50px;
+        font-size: 18px;
+    }
+    .podium-col.first-place .podium-avatar {
+        width: 65px;
+        height: 65px;
+        font-size: 24px;
+    }
+    .podium-name {
+        font-size: 13px;
+        max-width: 100px;
     }
 }
 </style>
@@ -634,11 +741,45 @@ input:focus, select:focus {
         </div>
     </section>
 
-    <!-- RESULTS -->
+    <!-- RESULTS (FINAL LEADERS & PODIUM) -->
     <section id="results-view" class="main hidden">
-        <div class="card" style="text-align:center;">
+        <div class="card" style="text-align:center; overflow:hidden;">
             <h1>🏆 Leaderboard & Top Winners 🏆</h1>
-            <div id="results-list" class="results-list"></div>
+            
+            <!-- Live CSS Animated Podium -->
+            <div class="podium-container">
+                <!-- 2ND Place -->
+                <div class="podium-col second-place" id="p-col-2">
+                    <div class="podium-avatar">2</div>
+                    <div class="podium-name" id="p-name-2">---</div>
+                    <div class="podium-score" id="p-score-2">0 pts</div>
+                    <div class="podium-block">2</div>
+                </div>
+                
+                <!-- 1ST Place -->
+                <div class="podium-col first-place" id="p-col-1">
+                    <span class="crown-icon">👑</span>
+                    <div class="podium-avatar">1</div>
+                    <div class="podium-name" id="p-name-1">---</div>
+                    <div class="podium-score" id="p-score-1">0 pts</div>
+                    <div class="podium-block">1</div>
+                </div>
+                
+                <!-- 3RD Place -->
+                <div class="podium-col third-place" id="p-col-3">
+                    <div class="podium-avatar">3</div>
+                    <div class="podium-name" id="p-name-3">---</div>
+                    <div class="podium-score" id="p-score-3">0 pts</div>
+                    <div class="podium-block">3</div>
+                </div>
+            </div>
+
+            <!-- Runners up List (Rank 4+) -->
+            <div class="secondary-leaderboard">
+                <h3>Final Standings</h3>
+                <div id="results-list" class="results-list"></div>
+            </div>
+            
             <br>
             <button class="primary" onclick="openLobby()" style="font-size:18px;">Host Another Round</button>
         </div>
@@ -728,7 +869,7 @@ let currentQuestion = 0;
 let players = {};
 let isHost = true;
 
-// Player session (Fresh ID generated per session, no auto-fill)
+// Player session (Fresh random ID, no name caching)
 let myPlayerId = "p_" + Math.random().toString(36).substr(2, 9);
 let myPlayerName = "";
 
@@ -856,7 +997,6 @@ function handleNetworkMessage(topic, data) {
             }
         }
     } else {
-        // Player side message handling
         if (action === "join_accepted" && data.playerId === myPlayerId) {
             document.getElementById("player-confirm-name").textContent = data.playerName;
             showPlayerSection("mobile-waiting-box");
@@ -864,7 +1004,6 @@ function handleNetworkMessage(topic, data) {
             currentQuestion = data.questionIndex;
             playerTimeLeft = data.timeLimit || 20;
 
-            // Render question text & choices directly on mobile
             document.getElementById("player-question-indicator").textContent = `Question ${data.questionIndex + 1}`;
             document.getElementById("phone-question-text").textContent = data.questionText;
             for (let i = 0; i < 4; i++) {
@@ -908,7 +1047,7 @@ function renderStudioQuestions() {
         const item = document.createElement("div");
         item.className = "question-item " + (idx === selectedQuestion ? "active" : "");
         item.innerHTML = `
-            <span>${idx + 1}. ${escapeHtml(q.question.substring(0, 22))}${q.question.length > 22 ? '...' : ''}</span>
+            <span>\${idx + 1}. \${escapeHtml(q.question.substring(0, 22))}${q.question.length > 22 ? '...' : ''}</span>
             <span class="q-time-tag">${q.timeLimit || 20}s</span>
         `;
         item.onclick = () => {
@@ -980,7 +1119,7 @@ function backToStudio() {
 }
 
 /* =========================================================
-   HOST: LOBBY & QR GENERATION
+   HOST: LOBBY & FOOLPROOF QR GENERATION
    ========================================================= */
 function openLobby() {
     saveCurrentQuestion();
@@ -990,265 +1129,4 @@ function openLobby() {
     
     hideAllHostViews();
     document.getElementById("lobby-view").classList.remove("hidden");
-    document.getElementById("game-pin").textContent = currentGamePin;
-    renderPlayers();
-
-    if (mqttClient) {
-        mqttClient.subscribe(`kahoot_dinner/${gameSessionId}/+`);
-    }
-
-    let baseUrl = window.location.href.split('?')[0].split('#')[0];
-    const playerJoinUrl = `${baseUrl}?role=player&game=${gameSessionId}&pin=${currentGamePin}`;
-    document.getElementById("join-url").textContent = playerJoinUrl;
-
-    const qrImage = document.getElementById("qr-image");
-    qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(playerJoinUrl)}`;
-}
-
-function renderPlayers() {
-    const grid = document.getElementById("players-grid");
-    grid.innerHTML = "";
-    const playerList = Object.values(players);
-    document.getElementById("player-count").textContent = playerList.length;
-    playerList.forEach(p => {
-        const badge = document.createElement("div");
-        badge.className = "player-badge";
-        badge.innerHTML = `
-            <div class="player-avatar">${p.name.charAt(0).toUpperCase()}</div>
-            <span>${escapeHtml(p.name)}</span>
-        `;
-        grid.appendChild(badge);
-    });
-}
-
-function startGame() {
-    hideAllHostViews();
-    document.getElementById("game-view").classList.remove("hidden");
-    currentQuestion = 0;
-    showQuestion();
-}
-
-/* =========================================================
-   HOST: LIVE GAME CONTROLLER
-   ========================================================= */
-function showQuestion() {
-    stopHostTimer();
-    const q = questions[currentQuestion];
-    questionTimeLimit = q.timeLimit || 20;
-    hostTimeLeft = questionTimeLimit;
-    isQuestionActive = true;
-
-    for (let i = 0; i < 4; i++) {
-        const box = document.getElementById("box-ans-" + i);
-        box.classList.remove("revealed-correct", "faded");
-    }
-
-    document.getElementById("game-progress").textContent = `Question ${currentQuestion + 1} / ${questions.length}`;
-    document.getElementById("game-question").textContent = q.question;
-    for (let i = 0; i < 4; i++) {
-        document.getElementById("game-answer-" + i).textContent = q.answers[i];
-    }
-
-    Object.keys(players).forEach(id => players[id].answered = -1);
-    updateAnswerStats();
-
-    updateTimerDisplay(hostTimeLeft);
-    hostTimerInterval = setInterval(() => {
-        hostTimeLeft--;
-        updateTimerDisplay(hostTimeLeft);
-        if (hostTimeLeft <= 0) {
-            handleTimeUp();
-        }
-    }, 1000);
-
-    // Broadcast question text, options and timer to all phones
-    sendNetworkMessage("new_question", { 
-        questionIndex: currentQuestion,
-        questionText: q.question,
-        answers: q.answers,
-        timeLimit: questionTimeLimit 
-    });
-}
-
-function updateTimerDisplay(seconds) {
-    const timerEl = document.getElementById("game-timer");
-    timerEl.textContent = Math.max(0, seconds) + "s";
-    if (seconds <= 5) {
-        timerEl.classList.add("urgent");
-    } else {
-        timerEl.classList.remove("urgent");
-    }
-}
-
-function handleTimeUp() {
-    stopHostTimer();
-    isQuestionActive = false;
-    updateTimerDisplay(0);
-    sendNetworkMessage("time_up", {});
-
-    const correctIdx = questions[currentQuestion].correct;
-    for (let i = 0; i < 4; i++) {
-        const box = document.getElementById("box-ans-" + i);
-        if (i === correctIdx) {
-            box.classList.add("revealed-correct");
-        } else {
-            box.classList.add("faded");
-        }
-    }
-}
-
-function stopHostTimer() {
-    if (hostTimerInterval) {
-        clearInterval(hostTimerInterval);
-        hostTimerInterval = null;
-    }
-}
-
-function updateAnswerStats() {
-    const total = Object.keys(players).length;
-    const count = Object.values(players).filter(p => p.answered !== -1).length;
-    document.getElementById("game-answered-stat").textContent = `${count} of ${total} Answered`;
-}
-
-function nextQuestion() {
-    stopHostTimer();
-    if (currentQuestion < questions.length - 1) {
-        currentQuestion++;
-        showQuestion();
-    } else {
-        finishGame();
-    }
-}
-
-function finishGame() {
-    stopHostTimer();
-    hideAllHostViews();
-    document.getElementById("results-view").classList.remove("hidden");
-    sendNetworkMessage("game_over", {});
-
-    const sorted = Object.values(players).sort((a, b) => b.score - a.score);
-    const list = document.getElementById("results-list");
-    list.innerHTML = "";
-    sorted.forEach((p, idx) => {
-        const row = document.createElement("div");
-        row.className = "result-row";
-        row.innerHTML = `
-            <div class="rank">#${idx + 1}</div>
-            <div style="flex:1; text-align:left; font-weight:800; font-size:18px;">${escapeHtml(p.name)}</div>
-            <div style="font-size:22px; font-weight:900; color:#46178f;">${p.score} pts</div>
-        `;
-        list.appendChild(row);
-    });
-}
-
-function hideAllHostViews() {
-    document.getElementById("studio-view").classList.add("hidden");
-    document.getElementById("lobby-view").classList.add("hidden");
-    document.getElementById("game-view").classList.add("hidden");
-    document.getElementById("results-view").classList.add("hidden");
-}
-
-/* =========================================================
-   MOBILE PLAYER CONTROLLER
-   ========================================================= */
-function initPlayerMode() {
-    isHost = false;
-    document.getElementById("host-app").classList.add("hidden");
-    document.getElementById("player-view").classList.remove("hidden");
-
-    // Ensure WWID input is blank every time a player joins
-    const nameInput = document.getElementById("mobile-player-name");
-    nameInput.value = "";
-
-    const params = new URLSearchParams(window.location.search);
-    gameSessionId = params.get("game") || "";
-    currentGamePin = params.get("pin") || "----";
-    document.getElementById("phone-display-pin").textContent = currentGamePin;
-
-    initRealtimeNetwork(() => {
-        mqttClient.subscribe(`kahoot_dinner/${gameSessionId}/+`);
-    });
-}
-
-function playerSubmitJoin() {
-    const nameInput = document.getElementById("mobile-player-name").value.trim();
-    if (!nameInput) {
-        alert("Please enter your WWID!");
-        return;
-    }
-    myPlayerName = nameInput;
-    sendNetworkMessage("join_request", {
-        playerId: myPlayerId,
-        name: myPlayerName
-    });
-}
-
-function startPlayerTimer(duration) {
-    stopPlayerTimer();
-    playerTimeLeft = duration;
-    const badge = document.getElementById("player-timer-badge");
-    badge.textContent = playerTimeLeft + "s";
-
-    playerTimerInterval = setInterval(() => {
-        playerTimeLeft--;
-        if (playerTimeLeft >= 0) {
-            badge.textContent = playerTimeLeft + "s";
-        }
-        if (playerTimeLeft <= 0) {
-            stopPlayerTimer();
-            enablePhoneButtons(false);
-        }
-    }, 1000);
-}
-
-function stopPlayerTimer() {
-    if (playerTimerInterval) {
-        clearInterval(playerTimerInterval);
-        playerTimerInterval = null;
-    }
-}
-
-function playerPickAnswer(idx) {
-    stopPlayerTimer();
-    enablePhoneButtons(false);
-    sendNetworkMessage("submit_answer", {
-        playerId: myPlayerId,
-        answerIndex: idx
-    });
-    showPlayerSection("mobile-answered-box");
-}
-
-function showPlayerSection(id) {
-    ["mobile-join-box", "mobile-waiting-box", "mobile-playing-box", "mobile-answered-box", "mobile-timeup-box"].forEach(box => {
-        document.getElementById(box).classList.add("hidden");
-    });
-    document.getElementById(id).classList.remove("hidden");
-}
-
-function enablePhoneButtons(enabled) {
-    document.querySelectorAll(".phone-btn").forEach(btn => btn.disabled = !enabled);
-}
-
-function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, m => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    })[m]);
-}
-
-/* =========================================================
-   INITIALIZATION
-   ========================================================= */
-window.addEventListener("load", () => {
-    loadDefaultQuestions();
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("role") === "player") {
-        initPlayerMode();
-    } else {
-        renderStudioQuestions();
-        loadQuestionToEditor(0);
-        initRealtimeNetwork();
-    }
-});
-</script>
-</body>
-</html>
+    document
