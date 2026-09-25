@@ -448,7 +448,6 @@ input:focus, select:focus {
     100% { transform: translate(-50%, -6px); }
 }
 
-/* Secondary Leaderboard (4th place and below) */
 .secondary-leaderboard {
     max-width: 750px;
     margin: 40px auto 20px auto;
@@ -544,6 +543,12 @@ input:focus, select:focus {
 .player-status-card {
     text-align: center;
     padding: 30px 10px;
+}
+.net-status {
+    font-size: 12px;
+    text-align: center;
+    margin-top: 10px;
+    color: #888;
 }
 
 @media (max-width: 768px) {
@@ -746,7 +751,6 @@ input:focus, select:focus {
         <div class="card" style="text-align:center; overflow:hidden;">
             <h1>🏆 Leaderboard & Top Winners 🏆</h1>
             
-            <!-- Live CSS Animated Podium -->
             <div class="podium-container">
                 <!-- 2ND Place -->
                 <div class="podium-col second-place" id="p-col-2">
@@ -774,7 +778,6 @@ input:focus, select:focus {
                 </div>
             </div>
 
-            <!-- Runners up List (Rank 4+) -->
             <div class="secondary-leaderboard">
                 <h3>Final Standings</h3>
                 <div id="results-list" class="results-list"></div>
@@ -799,9 +802,10 @@ input:focus, select:focus {
             <p style="text-align:center; color:#666;">PIN: <strong id="phone-display-pin">----</strong></p>
             <label><strong>WWID</strong></label>
             <input type="text" id="mobile-player-name" placeholder="Enter WWID (e.g. 12345678)" maxlength="30" style="margin-top:6px;" value="">
-            <button class="primary" onclick="playerSubmitJoin()" style="width:100%; margin-top:15px; font-size:18px;">
+            <button class="primary" id="btn-join-submit" onclick="playerSubmitJoin()" style="width:100%; margin-top:15px; font-size:18px;">
                 JOIN GAME
             </button>
+            <div id="player-net-status" class="net-status">Connecting to server...</div>
         </div>
 
         <!-- MOBILE WAITING -->
@@ -809,7 +813,7 @@ input:focus, select:focus {
             <div style="font-size:55px;">🎉</div>
             <h2>You're In!</h2>
             <p>Welcome, <strong id="player-confirm-name"></strong>!</p>
-            <p style="color:#666;">The host will start the quiz shortly. Keep your phone on this screen.</p>
+            <p style="color:#666;">Look at the big screen projector. The host will start shortly!</p>
         </div>
 
         <!-- MOBILE PLAYING -->
@@ -859,6 +863,7 @@ input:focus, select:focus {
 /* =========================================================
    PUBLIC REAL-TIME MESSAGING (MQTT OVER WEBSOCKET)
    ========================================================= */
+// Secure WebSocket connection string with explicit /mqtt path
 const MQTT_BROKER = "wss://broker.emqx.io:8084/mqtt";
 let mqttClient = null;
 let gameSessionId = "";
@@ -868,8 +873,9 @@ let selectedQuestion = 0;
 let currentQuestion = 0;
 let players = {};
 let isHost = true;
+let isConnected = false;
 
-// Player session (Fresh random ID, no name caching)
+// Player session (Fresh random ID per session)
 let myPlayerId = "p_" + Math.random().toString(36).substr(2, 9);
 let myPlayerName = "";
 
@@ -928,16 +934,34 @@ function initRealtimeNetwork(onConnected) {
         mqttClient = mqtt.connect(MQTT_BROKER, {
             clientId: (isHost ? "host_" : "player_") + Math.random().toString(16).substr(2, 8),
             clean: true,
-            reconnectPeriod: 3000
+            connectTimeout: 5000,
+            reconnectPeriod: 2500
         });
 
         mqttClient.on("connect", () => {
-            const statusEl = document.getElementById("host-connection-status");
-            if (statusEl) {
-                statusEl.textContent = "● Live Network Active";
-                statusEl.style.background = "rgba(40, 167, 69, 0.4)";
+            isConnected = true;
+            if (isHost) {
+                const statusEl = document.getElementById("host-connection-status");
+                if (statusEl) {
+                    statusEl.textContent = "● Live Network Active";
+                    statusEl.style.background = "rgba(40, 167, 69, 0.4)";
+                }
+            } else {
+                const pStatus = document.getElementById("player-net-status");
+                if (pStatus) {
+                    pStatus.textContent = "● Connected to Game Room";
+                    pStatus.style.color = "#28a745";
+                }
             }
             if (onConnected) onConnected();
+        });
+
+        mqttClient.on("error", (err) => {
+            console.error("MQTT Connection Error:", err);
+            if (!isHost) {
+                const pStatus = document.getElementById("player-net-status");
+                if (pStatus) pStatus.textContent = "Connection issue. Retrying...";
+            }
         });
 
         mqttClient.on("message", (topic, payload) => {
@@ -997,6 +1021,7 @@ function handleNetworkMessage(topic, data) {
             }
         }
     } else {
+        // Player Handlers
         if (action === "join_accepted" && data.playerId === myPlayerId) {
             document.getElementById("player-confirm-name").textContent = data.playerName;
             showPlayerSection("mobile-waiting-box");
@@ -1119,7 +1144,7 @@ function backToStudio() {
 }
 
 /* =========================================================
-   HOST: LOBBY & FOOLPROOF QR GENERATION
+   HOST: LOBBY & QR CODE SETUP
    ========================================================= */
 function openLobby() {
     saveCurrentQuestion();
@@ -1253,6 +1278,7 @@ function finishGame() {
 
     const sorted = Object.values(players).sort((a, b) => b.score - a.score);
 
+    // Fixed array indexing bug
     const p1 = sorted[0] || { name: "---", score: 0 };
     const p2 = sorted || { name: "---", score: 0 };
     const p3 = sorted || { name: "---", score: 0 };
@@ -1310,6 +1336,16 @@ function updateAnswerStats() {
     document.getElementById("game-answered-stat").textContent = `${count} of ${total} Answered`;
 }
 
+function nextQuestion() {
+    stopHostTimer();
+    if (currentQuestion < questions.length - 1) {
+        currentQuestion++;
+        showQuestion();
+    } else {
+        finishGame();
+    }
+}
+
 /* =========================================================
    MOBILE PLAYER CONTROLLER
    ========================================================= */
@@ -1321,13 +1357,28 @@ function initPlayerMode() {
     const nameInput = document.getElementById("mobile-player-name");
     nameInput.value = "";
 
-    const params = new URLSearchParams(window.location.search);
-    gameSessionId = params.get("game") || "";
-    currentGamePin = params.get("pin") || "----";
+    // Parse parameters reliably
+    const urlParams = new URLSearchParams(window.location.search);
+    gameSessionId = urlParams.get("game") || "";
+    currentGamePin = urlParams.get("pin") || "----";
+
+    // Fallback URL parsing if search is blank
+    if (!gameSessionId) {
+        const fullUrl = window.location.href;
+        const matchGame = fullUrl.match(/[?&]game=([^&]+)/);
+        const matchPin = fullUrl.match(/[?&]pin=([^&]+)/);
+        if (matchGame) gameSessionId = decodeURIComponent(matchGame);
+        if (matchPin) currentGamePin = decodeURIComponent(matchPin);
+    }
+
     document.getElementById("phone-display-pin").textContent = currentGamePin;
 
     initRealtimeNetwork(() => {
-        mqttClient.subscribe(`kahoot_dinner/${gameSessionId}/+`);
+        if (gameSessionId) {
+            mqttClient.subscribe(`kahoot_dinner/${gameSessionId}/+`, (err) => {
+                if (!err) console.log("Subscribed to game topic successfully");
+            });
+        }
     });
 }
 
@@ -1337,11 +1388,29 @@ function playerSubmitJoin() {
         alert("Please enter your WWID!");
         return;
     }
+
+    if (!mqttClient || !isConnected) {
+        alert("Still connecting to network... please wait 2 seconds and tap Join again.");
+        return;
+    }
+
     myPlayerName = nameInput;
+    const btn = document.getElementById("btn-join-submit");
+    btn.disabled = true;
+    btn.textContent = "Joining...";
+
     sendNetworkMessage("join_request", {
         playerId: myPlayerId,
         name: myPlayerName
     });
+
+    // Timeout safety fallback if host does not respond
+    setTimeout(() => {
+        if (!document.getElementById("mobile-join-box").classList.contains("hidden")) {
+            btn.disabled = false;
+            btn.textContent = "JOIN GAME";
+        }
+    }, 4000);
 }
 
 function startPlayerTimer(duration) {
@@ -1397,33 +1466,15 @@ function escapeHtml(str) {
 }
 
 /* =========================================================
-   INITIALIZATION & STRICT ROLE ROUTING
+   INITIALIZATION
    ========================================================= */
 window.addEventListener("load", () => {
     loadDefaultQuestions();
-    
-    // Modern URLSearchParams lookup
-    const params = new URLSearchParams(window.location.search);
-    let role = params.get("role");
 
-    // Robust Fallback Query String Split
-    if (!role) {
-        const queryStr = window.location.href.split('?') || "";
-        const pairs = queryStr.split('&');
-        for (let pair of pairs) {
-            const [key, val] = pair.split('=');
-            if (key === "role") {
-                role = val;
-                break;
-            }
-        }
-    }
+    const fullUrl = window.location.href;
+    const isPlayer = fullUrl.includes("role=player");
 
-    // STAGE 2: Force Player Mode on phone screen sizes & touch-devices
-    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const isSmallScreen = window.innerWidth <= 768;
-
-    if (role === "player" || isMobileDevice || isSmallScreen) {
+    if (isPlayer) {
         initPlayerMode();
     } else {
         renderStudioQuestions();
