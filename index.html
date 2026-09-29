@@ -6,6 +6,8 @@
 <title>Annual Dinner Trivia Game</title>
 <!-- MQTT WebSocket Library -->
 <script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
+<!-- SheetJS for Excel (.xlsx/.xls) and CSV parsing -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 * {
     box-sizing: border-box;
@@ -177,6 +179,7 @@ input:focus, select:focus {
     gap: 10px;
     margin-top: 20px;
     justify-content: center;
+    flex-wrap: wrap;
 }
 
 /* =========================================================
@@ -476,14 +479,14 @@ input:focus, select:focus {
 }
 
 /* =========================================================
-   🎨 CUSTOMIZABLE LIVE SCOREBOARD STYLING
+   LIVE SCOREBOARD STYLING
    ========================================================= */
 .live-leaderboard {
     position: absolute;
     top: 80px;
     right: 24px;
     width: 320px;
-    background: rgba(255, 255, 255, 0.95); /* Outer container background */
+    background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(8px);
     border-radius: 12px;
     padding: 16px;
@@ -492,7 +495,7 @@ input:focus, select:focus {
     opacity: 0;
     transform: translateX(50px);
     transition: all 0.5s ease-out;
-    border: 2px solid #e5dcf4; /* Decorative border line */
+    border: 2px solid #e5dcf4;
 }
 .live-leaderboard.visible {
     opacity: 1;
@@ -501,7 +504,7 @@ input:focus, select:focus {
 .live-leaderboard h3 {
     margin-top: 0;
     text-align: center;
-    color: #46178f; /* Header title text color */
+    color: #46178f;
     font-size: 20px;
     font-weight: 800;
     border-bottom: 2px solid #eeeafa;
@@ -514,7 +517,7 @@ input:focus, select:focus {
     padding: 10px 4px;
     font-size: 15px;
     font-weight: 700;
-    color: #292343; /* Standard row text color */
+    color: #292343;
     border-bottom: 1px solid #f5f3fa;
 }
 .live-score-row:last-child {
@@ -527,7 +530,7 @@ input:focus, select:focus {
     max-width: 180px;
 }
 .live-score-row .score {
-    color: #46178f; /* Score points text color */
+    color: #46178f;
     font-weight: 800;
 }
 
@@ -677,12 +680,18 @@ input:focus, select:focus {
 
     <!-- STUDIO -->
     <section id="studio-view" class="main">
-        <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
             <div>
                 <h1>Quiz Studio</h1>
-                <p style="margin:0; color:#666;">Create or edit questions, answer choices, and timers.</p>
+                <p style="margin:0; color:#666;">Create questions manually, or import from an Excel/CSV file.</p>
             </div>
-            <button class="primary" onclick="openLobby()" style="font-size:18px;">Open Lobby for Guests ➔</button>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <!-- Hidden File Input for Import -->
+                <input type="file" id="import-file-input" accept=".xlsx,.xls,.csv,.json" style="display:none;" onchange="handleFileImport(event)">
+                <button class="secondary" onclick="document.getElementById('import-file-input').click()">📥 Import File</button>
+                <button class="secondary" onclick="downloadSampleTemplate()">📄 Sample Template</button>
+                <button class="primary" onclick="openLobby()" style="font-size:18px;">Open Lobby for Guests ➔</button>
+            </div>
         </div>
 
         <div class="studio-grid">
@@ -885,7 +894,6 @@ input:focus, select:focus {
             <h3 style="text-align:center; margin-bottom:15px;">Join Session</h3>
             <p style="text-align:center; color:#666;">PIN: <strong id="phone-display-pin">----</strong></p>
             <label><strong>WWID</strong></label>
-            <!-- Numeric-only keyboard forced for WWIDs -->
             <input type="number" id="mobile-player-name" placeholder="Enter WWID (e.g. 12345678)" style="margin-top:6px;" pattern="[0-9]*" inputmode="numeric" value="">
             <button class="primary" id="btn-join-submit" onclick="playerSubmitJoin()" style="width:100%; margin-top:15px; font-size:18px;">
                 JOIN GAME
@@ -1008,6 +1016,121 @@ function loadDefaultQuestions() {
             timeLimit: 15
         }
     ];
+}
+
+/* =========================================================
+   FILE IMPORT & TEMPLATE EXPORT LOGIC
+   ========================================================= */
+function downloadSampleTemplate() {
+    const csvContent = 
+`Question,Option A,Option B,Option C,Option D,Correct Answer,Time Limit
+What is the capital of Malaysia?,Penang,Kuala Lumpur,Putrajaya,Johor Bahru,B,20
+Which tower was once the tallest?,Petronas Twin Towers,The Exchange 106,KL Tower,Merdeka 118,A,20
+What is Malaysia's national dish?,Roti Canai,Nasi Lemak,Laksa,Char Kway Teow,B,15
+Which animal is national animal?,Sun Bear,Orangutan,Malayan Tiger,Proboscis Monkey,C,20`;
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "trivia_questions_template.csv";
+    link.click();
+}
+
+function handleFileImport(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    const fileName = file.name.toLowerCase();
+
+    if (fileName.endsWith('.json')) {
+        reader.onload = function(evt) {
+            try {
+                const parsed = JSON.parse(evt.target.result);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    questions = parsed;
+                    selectedQuestion = 0;
+                    renderStudioQuestions();
+                    loadQuestionToEditor(0);
+                    alert(`Successfully imported ${questions.length} questions from JSON!`);
+                } else {
+                    alert("Invalid JSON format. Expected an array of questions.");
+                }
+            } catch (err) {
+                alert("Failed to parse JSON file: " + err.message);
+            }
+        };
+        reader.readAsText(file);
+    } else {
+        // Excel (.xlsx, .xls) and CSV parser via SheetJS
+        reader.onload = function(evt) {
+            try {
+                const data = new Uint8Array(evt.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const sheet = workbook.Sheets[firstSheetName];
+                const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+                if (!rows || rows.length === 0) {
+                    alert("The uploaded spreadsheet is empty!");
+                    return;
+                }
+
+                const importedQuestions = [];
+
+                rows.forEach((row, i) => {
+                    // Flexible Header Detection
+                    const qText = row["Question"] || row["question"] || row["Question Text"] || Object.values(row)[0];
+                    const optA = row["Option A"] || row["Answer A"] || row["A"] || row["Option 1"] || row["Answer 1"] || "";
+                    const optB = row["Option B"] || row["Answer B"] || row["B"] || row["Option 2"] || row["Answer 2"] || "";
+                    const optC = row["Option C"] || row["Answer C"] || row["C"] || row["Option 3"] || row["Answer 3"] || "";
+                    const optD = row["Option D"] || row["Answer D"] || row["D"] || row["Option 4"] || row["Answer 4"] || "";
+                    
+                    let correctVal = row["Correct Answer"] || row["Correct"] || row["Answer"] || row["correct"] || 0;
+                    let correctIndex = 0;
+
+                    // Match letters A, B, C, D or numbers 1, 2, 3, 4
+                    if (typeof correctVal === "string") {
+                        const trimmed = correctVal.trim().toUpperCase();
+                        if (trimmed === "A" || trimmed === "1") correctIndex = 0;
+                        else if (trimmed === "B" || trimmed === "2") correctIndex = 1;
+                        else if (trimmed === "C" || trimmed === "3") correctIndex = 2;
+                        else if (trimmed === "D" || trimmed === "4") correctIndex = 3;
+                        else correctIndex = parseInt(trimmed) || 0;
+                    } else if (typeof correctVal === "number") {
+                        if (correctVal >= 1 && correctVal <= 4) correctIndex = correctVal - 1;
+                        else if (correctVal >= 0 && correctVal <= 3) correctIndex = correctVal;
+                    }
+
+                    let timeLimit = parseInt(row["Time Limit"] || row["Timer"] || row["Time"]) || 20;
+
+                    if (qText) {
+                        importedQuestions.push({
+                            question: String(qText).trim(),
+                            answers: [String(optA).trim(), String(optB).trim(), String(optC).trim(), String(optD).trim()],
+                            correct: correctIndex,
+                            timeLimit: timeLimit
+                        });
+                    }
+                });
+
+                if (importedQuestions.length > 0) {
+                    questions = importedQuestions;
+                    selectedQuestion = 0;
+                    renderStudioQuestions();
+                    loadQuestionToEditor(0);
+                    alert(`Successfully imported ${questions.length} questions!`);
+                } else {
+                    alert("Could not recognize question format. Please check the sample template.");
+                }
+            } catch (err) {
+                alert("Error reading spreadsheet: " + err.message);
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+    // Reset file input so user can re-import if needed
+    e.target.value = "";
 }
 
 /* =========================================================
@@ -1335,7 +1458,6 @@ function handleTimeUp() {
         }
     }
     
-    // Auto-reveal the live leaderboard after showing answer for 1.5s
     setTimeout(showLiveLeaderboard, 1500);
 }
 
@@ -1372,8 +1494,8 @@ function finishGame() {
     const sorted = Object.values(players).sort((a, b) => b.score - a.score);
 
     const p1 = sorted[0] || { name: "---", score: 0 };
-    const p2 = sorted[1] || { name: "---", score: 0 };
-    const p3 = sorted[2] || { name: "---", score: 0 };
+    const p2 = sorted || { name: "---", score: 0 };
+    const p3 = sorted || { name: "---", score: 0 };
 
     document.getElementById("p-name-1").textContent = escapeHtml(p1.name);
     document.getElementById("p-score-1").textContent = p1.score + " pts";
@@ -1446,7 +1568,7 @@ function exportResultsToCSV() {
 
     const sortedPlayers = Object.values(players).sort((a, b) => b.score - a.score);
 
-    let csvContent = "Rank,WWID,Score\r\n"; // CSV Header
+    let csvContent = "Rank,WWID,Score\r\n";
 
     sortedPlayers.forEach((player, index) => {
         const rank = index + 1;
@@ -1486,8 +1608,8 @@ function initPlayerMode() {
         const fullUrl = window.location.href;
         const matchGame = fullUrl.match(/[?&]game=([^&]+)/);
         const matchPin = fullUrl.match(/[?&]pin=([^&]+)/);
-        if (matchGame) gameSessionId = decodeURIComponent(matchGame[1]);
-        if (matchPin) currentGamePin = decodeURIComponent(matchPin[1]);
+        if (matchGame) gameSessionId = decodeURIComponent(matchGame);
+        if (matchPin) currentGamePin = decodeURIComponent(matchPin);
     }
 
     document.getElementById("phone-display-pin").textContent = currentGamePin;
@@ -1508,7 +1630,6 @@ function playerSubmitJoin() {
         return;
     }
 
-    // Double-check to ensure only numbers are submitted as WWID
     if (isNaN(nameInput)) {
         alert("WWID must be numeric only!");
         return;
@@ -1555,7 +1676,6 @@ function startPlayerTimer(duration) {
     }, 1000);
 }
 
-// Stop Mobile Timer
 function stopPlayerTimer() {
     if (playerTimerInterval) {
         clearInterval(playerTimerInterval);
